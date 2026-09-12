@@ -1,0 +1,15 @@
+[Unit]
+Description=Classroom essay grading agent
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Edit these two paths for your machine:
+WorkingDirectory=/home/YOUR_USERNAME/classroom_grading_agent
+ExecStart=/home/YOUR_USERNAME/classroom_grading_agent/.venv/bin/python pipeline.py
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
