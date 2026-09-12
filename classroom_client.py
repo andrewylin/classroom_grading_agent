@@ -1,5 +1,11 @@
-"""Thin wrapper around the Google Classroom API for the calls the pipeline needs."""
+"""Thin, read-only wrapper around the Google Classroom API.
+
+This client never patches grades or returns submissions - it only reads
+coursework, rubrics, submissions, and student names.
+"""
+from __future__ import annotations
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from models import Rubric, RubricCriterion, RubricLevel, Submission
 
@@ -54,17 +60,11 @@ class ClassroomClient:
             ))
         return out
 
-    def set_draft_grade(self, course_id: str, coursework_id: str, submission_id: str, grade: float):
-        self.service.courses().courseWork().studentSubmissions().patch(
-            courseId=course_id, courseWorkId=coursework_id, id=submission_id,
-            updateMask="draftGrade", body={"draftGrade": grade},
-        ).execute()
-
-    def set_assigned_grade_and_return(self, course_id: str, coursework_id: str, submission_id: str, grade: float):
-        self.service.courses().courseWork().studentSubmissions().patch(
-            courseId=course_id, courseWorkId=coursework_id, id=submission_id,
-            updateMask="assignedGrade", body={"assignedGrade": grade},
-        ).execute()
-        self.service.courses().courseWork().studentSubmissions().return_(
-            courseId=course_id, courseWorkId=coursework_id, id=submission_id, body={},
-        ).execute()
+    def get_student_name(self, user_id: str) -> str:
+        """Best-effort display name lookup. Falls back to the raw user ID if
+        the profile can't be read (e.g. scope/permission edge cases)."""
+        try:
+            profile = self.service.userProfiles().get(userId=user_id).execute()
+            return profile.get("name", {}).get("fullName", user_id)
+        except HttpError:
+            return user_id

@@ -25,12 +25,15 @@ MODEL_THINKING = _bool("MODEL_THINKING", True)  # use Qwen3 thinking mode for gr
 
 # Pipeline behavior
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
-AUTO_RETURN = _bool("AUTO_RETURN", False)  # if False: sets draftGrade + comment only, you review + return manually
 DB_PATH = os.getenv("DB_PATH", "grading_state.sqlite3")
+OUTPUT_PATH = os.getenv("OUTPUT_PATH", "grading_recommendations.csv")
 
+# Read-only everywhere: this agent never writes back to Classroom or Drive.
+# It reads submissions/rubrics and produces a local report for you to review
+# and enter yourself.
 SCOPES = [
     "https://www.googleapis.com/auth/classroom.courses.readonly",
-    "https://www.googleapis.com/auth/classroom.coursework.students",
+    "https://www.googleapis.com/auth/classroom.coursework.students.readonly",
     "https://www.googleapis.com/auth/classroom.rosters.readonly",
-    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]

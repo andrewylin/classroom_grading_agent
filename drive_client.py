@@ -1,4 +1,7 @@
-"""Thin wrapper around the Drive API: reading Doc text and posting comments."""
+"""Thin, read-only wrapper around the Drive API: reading Doc text only.
+
+No write methods here on purpose - this agent never touches student files.
+"""
 import io
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -21,8 +24,3 @@ class DriveClient:
         while not done:
             _, done = downloader.next_chunk()
         return buf.getvalue().decode("utf-8", errors="replace")
-
-    def post_comment(self, file_id: str, content: str):
-        self.service.comments().create(
-            fileId=file_id, body={"content": content}, fields="id"
-        ).execute()
