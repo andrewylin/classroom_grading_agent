@@ -1,5 +1,4 @@
 import logging
-import time
 
 import calibration_store
 import config
@@ -15,54 +14,94 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("grading_pipeline")
 
 
-def run_once(classroom: ClassroomClient, drive: DriveClient) -> int:
-    """Returns the number of new recommendations written this pass."""
+def prompt_int(msg: str, min_v: int, max_v: int) -> int:
+    while True:
+        raw = input(msg).strip()
+        try:
+            v = int(raw)
+            if min_v <= v <= max_v:
+                return v
+        except ValueError:
+            pass
+        print(f"  enter a whole number between {min_v} and {max_v}")
+
+
+def select_course_id() -> str:
+    if config.COURSE_IDS:
+        print("\nCourses:")
+        for i, course_id in enumerate(config.COURSE_IDS):
+            print(f"  [{i}] {course_id}")
+        idx = prompt_int("\nPick a course number: ", 0, len(config.COURSE_IDS) - 1)
+        return config.COURSE_IDS[idx]
+
+    while True:
+        course_id = input("Course ID: ").strip()
+        if course_id:
+            return course_id
+
+
+def select_coursework(classroom: ClassroomClient, course_id: str):
+    courseworks = classroom.list_coursework(course_id)
+    if not courseworks:
+        print("No published coursework found for that course.")
+        return None
+
+    print("\nAssignments:")
+    for i, cw in enumerate(courseworks):
+        print(f"  [{i}] {cw.get('title')}")
+    idx = prompt_int("\nPick an assignment number: ", 0, len(courseworks) - 1)
+    return courseworks[idx]
+
+
+def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, coursework_id: str) -> int:
+    """Returns the number of new recommendations written for one selected assignment."""
+    coursework = next((cw for cw in classroom.list_coursework(course_id) if cw["id"] == coursework_id), None)
+    if coursework is None:
+        raise ValueError(f"Coursework {coursework_id} not found in course {course_id}")
+
+    title = coursework.get("title", "")
+    instructions = coursework.get("description", "")
+
+    rubric = classroom.get_rubric(course_id, coursework_id)
+    if not rubric or not rubric.criteria:
+        log.warning("Skipping %s/%s: no rubric attached.", course_id, coursework_id)
+        return 0
+
+    calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
+    calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
+
+    submissions = classroom.list_turned_in_submissions(course_id, coursework_id)
     new_count = 0
-    for course_id in config.COURSE_IDS:
-        coursework_list = classroom.list_coursework(course_id)
-        for coursework in coursework_list:
-            coursework_id = coursework["id"]
-            title = coursework.get("title", "")
-            instructions = coursework.get("description", "")
+    for sub in submissions:
+        if sub.submission_id in calibrated_ids:
+            continue
 
-            rubric = classroom.get_rubric(course_id, coursework_id)
-            if not rubric or not rubric.criteria:
-                continue  # only auto-grade assignments that have a Classroom rubric attached
+        try:
+            revision_id = drive.get_revision_id(sub.drive_file_id)
+            if state_db.already_processed(sub.submission_id, revision_id):
+                continue
 
-            calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
-            calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
+            log.info("Grading submission %s (coursework=%s)", sub.submission_id, title)
+            essay_text = drive.export_text(sub.drive_file_id)
+            result = grade_essay(rubric, title, instructions, essay_text, calibration_examples)
+            result.submission_id = sub.submission_id
 
-            submissions = classroom.list_turned_in_submissions(course_id, coursework_id)
-            for sub in submissions:
-                if sub.submission_id in calibrated_ids:
-                    continue  # you already hand-graded this one via calibrate.py
+            student_name = classroom.get_student_name(sub.student_user_id)
+            recommendation = Recommendation(
+                course_id=course_id, coursework_id=coursework_id, coursework_title=title,
+                submission_id=sub.submission_id, student_user_id=sub.student_user_id,
+                student_name=student_name, doc_revision_id=revision_id, grade=result,
+            )
+            report_writer.append(recommendation)
+            state_db.mark_processed(sub.submission_id, revision_id, result.overall_score)
 
-                try:
-                    revision_id = drive.get_revision_id(sub.drive_file_id)
-                    if state_db.already_processed(sub.submission_id, revision_id):
-                        continue
-
-                    log.info("Grading submission %s (coursework=%s)", sub.submission_id, title)
-                    essay_text = drive.export_text(sub.drive_file_id)
-                    result = grade_essay(rubric, title, instructions, essay_text, calibration_examples)
-                    result.submission_id = sub.submission_id
-
-                    student_name = classroom.get_student_name(sub.student_user_id)
-                    recommendation = Recommendation(
-                        course_id=course_id, coursework_id=coursework_id, coursework_title=title,
-                        submission_id=sub.submission_id, student_user_id=sub.student_user_id,
-                        student_name=student_name, doc_revision_id=revision_id, grade=result,
-                    )
-                    report_writer.append(recommendation)
-                    state_db.mark_processed(sub.submission_id, revision_id, result.overall_score)
-
-                    log.info(
-                        "Recommendation written: %s — %.1f/%.0f",
-                        student_name, result.overall_score, result.overall_max,
-                    )
-                    new_count += 1
-                except Exception:
-                    log.exception("Failed to grade submission %s", sub.submission_id)
+            log.info(
+                "Recommendation written: %s — %.1f/%.0f",
+                student_name, result.overall_score, result.overall_max,
+            )
+            new_count += 1
+        except Exception:
+            log.exception("Failed to grade submission %s", sub.submission_id)
     return new_count
 
 
@@ -71,13 +110,20 @@ def main():
     classroom = ClassroomClient(creds)
     drive = DriveClient(creds)
 
-    log.info("Starting grading pipeline (read-only). Watching courses: %s", config.COURSE_IDS)
+    course_id = select_course_id()
+    coursework = select_coursework(classroom, course_id)
+    if coursework is None:
+        return
+
+    coursework_id = coursework["id"]
+    log.info("Starting grading run for course %s assignment %s", course_id, coursework.get("title", coursework_id))
     log.info("Recommendations will be appended to: %s", config.OUTPUT_PATH)
-    while True:
-        n = run_once(classroom, drive)
-        if n:
-            log.info("%d new recommendation(s) added to %s", n, config.OUTPUT_PATH)
-        time.sleep(config.POLL_INTERVAL_SECONDS)
+
+    n = run_once(classroom, drive, course_id, coursework_id)
+    if n:
+        log.info("%d new recommendation(s) added to %s", n, config.OUTPUT_PATH)
+    else:
+        log.info("No new recommendations written for %s.", coursework.get("title", coursework_id))
 
 
 if __name__ == "__main__":

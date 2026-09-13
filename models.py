@@ -51,7 +51,6 @@ class CriterionScore:
     criterion_title: str
     score: int
     max_score: int
-    justification: str
 
 
 @dataclass
@@ -87,7 +86,7 @@ class Recommendation:
             "recommended_grade": f"{self.grade.overall_score:.1f}",
             "max_grade": f"{self.grade.overall_max:.0f}",
             "criteria_breakdown": " | ".join(
-                f"{cs.criterion_title}: {cs.score}/{cs.max_score} - {cs.justification}"
+                f"{cs.criterion_title}: {cs.score}/{cs.max_score}"
                 for cs in self.grade.criterion_scores
             ),
             "feedback_summary": self.grade.feedback_summary,

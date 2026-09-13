@@ -17,9 +17,8 @@ def _build_schema(rubric: Rubric) -> dict:
             "type": "object",
             "properties": {
                 "score": {"type": "integer", "minimum": 0, "maximum": c.max_score},
-                "justification": {"type": "string"},
             },
-            "required": ["score", "justification"],
+            "required": ["score"],
         }
         required.append(key)
 
@@ -52,7 +51,7 @@ def _build_calibration_block(rubric: Rubric, calibration_examples: list[dict]) -
         for c in rubric.criteria:
             cs = ex["criterion_scores"].get(c.id)
             if cs:
-                blocks.append(f"  {c.title}: {cs['score']}/{c.max_score} — {cs['justification']}")
+                blocks.append(f"  {c.title}: {cs['score']}/{c.max_score}")
         blocks.append(f"Teacher's feedback: {ex['feedback_summary']}\n")
     return "\n".join(blocks)
 
@@ -90,12 +89,11 @@ Student essay:
 \"\"\"
 
 Score every rubric criterion independently, using only the point values defined
-for that criterion. For each criterion give a 1-2 sentence justification tied to
-specific evidence in the essay. Then write a short (3-5 sentence) overall
+for that criterion. Then write a short (1 sentence) overall
 feedback summary aimed at the student: what's working, and the single most
 useful thing to revise next. Be specific — cite the essay's own content, not
 generic advice. Do not be swayed by essay length or vocabulary alone; grade
-against the rubric language."""
+against the rubric language. Never mention anything about calibration."""
 
 
 def grade_essay(
@@ -128,7 +126,6 @@ def grade_essay(
         criterion_scores.append(CriterionScore(
             criterion_id=c.id, criterion_title=c.title,
             score=entry["score"], max_score=c.max_score,
-            justification=entry["justification"],
         ))
         total_score += entry["score"]
 

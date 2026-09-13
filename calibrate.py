@@ -84,8 +84,7 @@ def main():
             for lvl in sorted(c.levels, key=lambda l: -l.score):
                 print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
             score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
-            justification = input("Brief justification for this score: ").strip()
-            criterion_scores[c.id] = {"score": score, "justification": justification}
+            criterion_scores[c.id] = {"score": score}
 
         feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
 
