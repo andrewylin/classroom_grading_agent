@@ -21,16 +21,25 @@ COURSE_IDS = [c.strip() for c in os.getenv("COURSE_IDS", "").split(",") if c.str
 # Local model server (Ollama, OpenAI-compatible)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen3:8b")
-MODEL_THINKING = _bool("MODEL_THINKING", True)  # use Qwen3 thinking mode for grading
+MODEL_THINKING = _bool("MODEL_THINKING", False)  # off by default - CPU-only thinking mode is very slow
+MODEL_TIMEOUT_SECONDS = int(os.getenv("MODEL_TIMEOUT_SECONDS", "1800"))
 
 # Pipeline behavior
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
-AUTO_RETURN = _bool("AUTO_RETURN", False)  # if False: sets draftGrade + comment only, you review + return manually
 DB_PATH = os.getenv("DB_PATH", "grading_state.sqlite3")
+OUTPUT_PATH = os.getenv("OUTPUT_PATH", "grading_recommendations.csv")
+CALIBRATION_DIR = os.getenv("CALIBRATION_DIR", "calibration")
+# How many of your saved calibration examples to include per grading prompt.
+# More examples improve calibration but lengthen the prompt - on CPU-only
+# hardware that directly costs you time per essay, so keep this small.
+MAX_CALIBRATION_EXAMPLES = int(os.getenv("MAX_CALIBRATION_EXAMPLES", "3"))
 
+# Read-only everywhere: this agent never writes back to Classroom or Drive.
+# It reads submissions/rubrics and produces a local report for you to review
+# and enter yourself.
 SCOPES = [
     "https://www.googleapis.com/auth/classroom.courses.readonly",
-    "https://www.googleapis.com/auth/classroom.coursework.students",
+    "https://www.googleapis.com/auth/classroom.coursework.students.readonly",
     "https://www.googleapis.com/auth/classroom.rosters.readonly",
-    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]

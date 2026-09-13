@@ -51,7 +51,6 @@ class CriterionScore:
     criterion_title: str
     score: int
     max_score: int
-    justification: str
 
 
 @dataclass
@@ -62,13 +61,33 @@ class GradeResult:
     overall_max: float
     feedback_summary: str
 
-    def as_comment_text(self) -> str:
-        """Render the grade result as a single Drive comment."""
-        lines = [f"AI-assisted grade: {self.overall_score:.1f} / {self.overall_max:.0f}", ""]
-        for cs in self.criterion_scores:
-            lines.append(f"• {cs.criterion_title}: {cs.score}/{cs.max_score} — {cs.justification}")
-        lines.append("")
-        lines.append(self.feedback_summary)
-        lines.append("")
-        lines.append("(Draft grade posted to Classroom — review before returning.)")
-        return "\n".join(lines)
+
+@dataclass
+class Recommendation:
+    """A grading recommendation plus the context needed to act on it manually
+    - this is what actually gets written to the output report. Nothing here
+    is ever pushed back to Classroom or Drive."""
+    course_id: str
+    coursework_id: str
+    coursework_title: str
+    submission_id: str
+    student_user_id: str
+    student_name: str
+    doc_revision_id: str
+    grade: GradeResult
+
+    def to_row(self) -> dict:
+        return {
+            "course_id": self.course_id,
+            "coursework_title": self.coursework_title,
+            "student_name": self.student_name,
+            "student_user_id": self.student_user_id,
+            "submission_id": self.submission_id,
+            "recommended_grade": f"{self.grade.overall_score:.1f}",
+            "max_grade": f"{self.grade.overall_max:.0f}",
+            "criteria_breakdown": " | ".join(
+                f"{cs.criterion_title}: {cs.score}/{cs.max_score}"
+                for cs in self.grade.criterion_scores
+            ),
+            "feedback_summary": self.grade.feedback_summary,
+        }

@@ -1,11 +1,19 @@
 """Handles the one-time OAuth consent flow and token refresh/caching."""
 import os
+
+# Google sometimes returns a granted scope string that differs slightly from
+# what was requested (e.g. substituting a narrower, equivalent scope like
+# classroom.student-submissions.students.readonly for
+# classroom.coursework.students.readonly). oauthlib treats any scope-string
+# mismatch as fatal unless told otherwise. Must be set before importing
+# google_auth_oauthlib.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 import config
-
 
 def get_credentials() -> Credentials:
     creds = None
