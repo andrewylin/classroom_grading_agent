@@ -26,13 +26,28 @@ def prompt_int(msg: str, min_v: int, max_v: int) -> int:
         print(f"  enter a whole number between {min_v} and {max_v}")
 
 
-def select_course_id() -> str:
+def course_label(classroom: ClassroomClient, course_id: str) -> str:
+    name = classroom.get_course_name(course_id)
+    return f"{name} ({course_id})" if name and name != course_id else course_id
+
+
+def select_course_id(classroom: ClassroomClient) -> str:
     if config.COURSE_IDS:
         print("\nCourses:")
         for i, course_id in enumerate(config.COURSE_IDS):
-            print(f"  [{i}] {course_id}")
+            print(f"  [{i}] {course_label(classroom, course_id)}")
         idx = prompt_int("\nPick a course number: ", 0, len(config.COURSE_IDS) - 1)
         return config.COURSE_IDS[idx]
+
+    available = classroom.list_courses()
+    if available:
+        print("\nCourses:")
+        for i, course in enumerate(available):
+            course_id = course.get("id")
+            course_name = course.get("name") or course_id
+            print(f"  [{i}] {course_name} ({course_id})")
+        idx = prompt_int("\nPick a course number: ", 0, len(available) - 1)
+        return available[idx].get("id")
 
     while True:
         course_id = input("Course ID: ").strip()
@@ -122,13 +137,14 @@ def main():
     classroom = ClassroomClient(creds)
     drive = DriveClient(creds)
 
-    course_id = select_course_id()
+    course_id = select_course_id(classroom)
     coursework = select_coursework(classroom, course_id)
     if coursework is None:
         return
 
     coursework_id = coursework["id"]
-    log.info("Starting grading run for course %s assignment %s", course_id, coursework.get("title", coursework_id))
+    course_name = classroom.get_course_name(course_id)
+    log.info("Starting grading run for course %s (%s) assignment %s", course_name, course_id, coursework.get("title", coursework_id))
     log.info("Recommendations will be appended to: %s", config.OUTPUT_PATH)
 
     n = run_once(classroom, drive, course_id, coursework_id)

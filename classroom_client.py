@@ -14,6 +14,17 @@ class ClassroomClient:
     def __init__(self, credentials):
         self.service = build("classroom", "v1", credentials=credentials)
 
+    def list_courses(self) -> list[dict]:
+        resp = self.service.courses().list(pageSize=100).execute()
+        return resp.get("courses", [])
+
+    def get_course_name(self, course_id: str) -> str:
+        try:
+            course = self.service.courses().get(id=course_id).execute()
+            return course.get("name", course_id)
+        except HttpError:
+            return course_id
+
     def list_coursework(self, course_id: str) -> list[dict]:
         resp = self.service.courses().courseWork().list(
             courseId=course_id, courseWorkStates=["PUBLISHED"]
