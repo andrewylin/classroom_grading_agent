@@ -1,6 +1,7 @@
 import logging
 import time
 
+import calibration_store
 import config
 import report_writer
 import state_db
@@ -28,8 +29,14 @@ def run_once(classroom: ClassroomClient, drive: DriveClient) -> int:
             if not rubric or not rubric.criteria:
                 continue  # only auto-grade assignments that have a Classroom rubric attached
 
+            calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
+            calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
+
             submissions = classroom.list_turned_in_submissions(course_id, coursework_id)
             for sub in submissions:
+                if sub.submission_id in calibrated_ids:
+                    continue  # you already hand-graded this one via calibrate.py
+
                 try:
                     revision_id = drive.get_revision_id(sub.drive_file_id)
                     if state_db.already_processed(sub.submission_id, revision_id):
@@ -37,7 +44,7 @@ def run_once(classroom: ClassroomClient, drive: DriveClient) -> int:
 
                     log.info("Grading submission %s (coursework=%s)", sub.submission_id, title)
                     essay_text = drive.export_text(sub.drive_file_id)
-                    result = grade_essay(rubric, title, instructions, essay_text)
+                    result = grade_essay(rubric, title, instructions, essay_text, calibration_examples)
                     result.submission_id = sub.submission_id
 
                     student_name = classroom.get_student_name(sub.student_user_id)
