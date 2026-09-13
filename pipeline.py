@@ -53,6 +53,16 @@ def select_coursework(classroom: ClassroomClient, course_id: str):
     return courseworks[idx]
 
 
+def sort_submissions_by_student_first_name(classroom: ClassroomClient, submissions: list) -> list:
+    def first_name_key(submission):
+        name = classroom.get_student_name(submission.student_user_id)
+        parts = name.strip().split()
+        first = parts[0].lower() if parts else ""
+        return (first, name.lower())
+
+    return sorted(submissions, key=first_name_key)
+
+
 def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, coursework_id: str) -> int:
     """Returns the number of new recommendations written for one selected assignment."""
     coursework = next((cw for cw in classroom.list_coursework(course_id) if cw["id"] == coursework_id), None)
@@ -70,7 +80,9 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
     calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
     calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
 
-    submissions = classroom.list_turned_in_submissions(course_id, coursework_id)
+    submissions = sort_submissions_by_student_first_name(
+        classroom, classroom.list_turned_in_submissions(course_id, coursework_id)
+    )
     new_count = 0
     for sub in submissions:
         if sub.submission_id in calibrated_ids:
@@ -81,7 +93,7 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
             if state_db.already_processed(sub.submission_id, revision_id):
                 continue
 
-            log.info("Grading submission %s (coursework=%s)", sub.submission_id, title)
+            log.info("Grading submission %s", sub.submission_id)
             essay_text = drive.export_text(sub.drive_file_id)
             result = grade_essay(rubric, title, instructions, essay_text, calibration_examples)
             result.submission_id = sub.submission_id
@@ -96,8 +108,8 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
             state_db.mark_processed(sub.submission_id, revision_id, result.overall_score)
 
             log.info(
-                "Recommendation written: %s — %.1f/%.0f",
-                student_name, result.overall_score, result.overall_max,
+                "Recommendation written: %s — %.1f/%.0f - %s",
+                student_name, result.overall_score, result.overall_max, result.feedback_summary[:50].replace("\n", " ") + ("..." if len(result.feedback_summary) > 50 else "")
             )
             new_count += 1
         except Exception:
