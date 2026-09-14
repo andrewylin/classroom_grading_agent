@@ -1,6 +1,6 @@
 import unittest
 
-from grader import _build_schema
+from grader import _build_schema, make_fallback_rubric
 from models import CriterionScore, Rubric, RubricCriterion, RubricLevel, Submission
 from pipeline import sort_submissions_by_student_first_name
 
@@ -28,6 +28,11 @@ class GradingModelTests(unittest.TestCase):
         self.assertEqual(score.score, 3)
         self.assertEqual(score.max_score, 4)
         self.assertFalse(hasattr(score, "justification"))
+
+    def test_fallback_rubric_used_for_rubricless_assignments(self):
+        rubric = make_fallback_rubric()
+        self.assertEqual(rubric.criteria[0].id, "overall")
+        self.assertEqual(rubric.max_total, 100)
 
     def test_submissions_are_sorted_by_student_first_name(self):
         class FakeClassroom:

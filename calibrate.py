@@ -74,9 +74,14 @@ def main():
     coursework_id = coursework["id"]
 
     rubric = classroom.get_rubric(course_id, coursework_id)
-    if not rubric or not rubric.criteria:
-        print("This assignment has no Classroom rubric attached - calibration needs one.")
-        return
+    if rubric and rubric.criteria:
+        grading_instructions = coursework.get("description", "")
+    else:
+        print("This assignment has no Classroom rubric attached; you'll provide custom grading guidance.")
+        grading_instructions = input(
+            "Enter any additional grading instructions for this assignment (leave blank to just use the assignment description): "
+        ).strip()
+        rubric = None
 
     submissions = classroom.list_turned_in_submissions(course_id, coursework_id)
     if not submissions:
@@ -108,13 +113,18 @@ def main():
         if choice != "y":
             continue
 
-        criterion_scores = {}
-        for c in rubric.criteria:
-            print(f"\nCriterion: {c.title} (0-{c.max_score})")
-            for lvl in sorted(c.levels, key=lambda l: -l.score):
-                print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
-            score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
-            criterion_scores[c.id] = {"score": score}
+        if rubric and rubric.criteria:
+            criterion_scores = {}
+            for c in rubric.criteria:
+                print(f"\nCriterion: {c.title} (0-{c.max_score})")
+                for lvl in sorted(c.levels, key=lambda l: -l.score):
+                    print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
+                score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
+                criterion_scores[c.id] = {"score": score}
+        else:
+            print("\nOverall score (0-100):")
+            score = prompt_int("Your overall score for this essay: ", 0, 100)
+            criterion_scores = {"overall": {"score": score}}
 
         feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
 
@@ -123,6 +133,7 @@ def main():
             "essay_text": essay_text,
             "criterion_scores": criterion_scores,
             "feedback_summary": feedback_summary,
+            "grading_instructions": grading_instructions,
         })
         print(f"Saved calibration example for {student_name}.\n")
 

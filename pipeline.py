@@ -88,11 +88,21 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
     instructions = coursework.get("description", "")
 
     rubric = classroom.get_rubric(course_id, coursework_id)
-    if not rubric or not rubric.criteria:
-        log.warning("Skipping %s/%s: no rubric attached.", course_id, coursework_id)
-        return 0
+    if rubric and rubric.criteria:
+        assignment_instructions = instructions
+        calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
+    else:
+        log.warning("No rubric attached for %s/%s; prompting for custom grading guidance.", course_id, coursework_id)
+        custom_instructions = input(
+            "No rubric found for this assignment. Enter any additional grading instructions for the prompt "
+            "(leave blank to use the assignment description only): "
+        ).strip()
+        assignment_instructions = "\n\n".join(
+            part for part in [instructions, f"Additional teacher grading instructions: {custom_instructions}" if custom_instructions else ""] if part
+        )
+        calibration_examples = []
+        rubric = None
 
-    calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
     calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
 
     submissions = sort_submissions_by_student_first_name(
@@ -110,7 +120,7 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
 
             log.info("Grading submission %s", sub.submission_id)
             essay_text = drive.export_text(sub.drive_file_id)
-            result = grade_essay(rubric, title, instructions, essay_text, calibration_examples)
+            result = grade_essay(rubric, title, assignment_instructions, essay_text, calibration_examples)
             result.submission_id = sub.submission_id
 
             student_name = classroom.get_student_name(sub.student_user_id)
