@@ -8,51 +8,11 @@ Run: python calibrate.py
 import config
 import calibration_store
 from classroom_client import ClassroomClient
+from cli import prompt_int, select_course_id
 from drive_client import DriveClient
 from google_auth import get_credentials
 
 ESSAY_PREVIEW_CHARS = 3000
-
-
-def prompt_int(msg: str, min_v: int, max_v: int) -> int:
-    while True:
-        raw = input(msg).strip()
-        try:
-            v = int(raw)
-            if min_v <= v <= max_v:
-                return v
-        except ValueError:
-            pass
-        print(f"  enter a whole number between {min_v} and {max_v}")
-
-
-def format_course_label(classroom: ClassroomClient, course_id: str) -> str:
-    name = classroom.get_course_name(course_id)
-    return f"{name} ({course_id})" if name and name != course_id else course_id
-
-
-def select_course_id(classroom: ClassroomClient) -> str:
-    if config.COURSE_IDS:
-        print("\nCourses:")
-        for i, course_id in enumerate(config.COURSE_IDS):
-            print(f"  [{i}] {format_course_label(classroom, course_id)}")
-        idx = prompt_int("\nPick a course number: ", 0, len(config.COURSE_IDS) - 1)
-        return config.COURSE_IDS[idx]
-
-    available = classroom.list_courses()
-    if available:
-        print("\nCourses:")
-        for i, course in enumerate(available):
-            course_id = course.get("id")
-            course_name = course.get("name") or course_id
-            print(f"  [{i}] {course_name} ({course_id})")
-        idx = prompt_int("\nPick a course number: ", 0, len(available) - 1)
-        return available[idx].get("id")
-
-    while True:
-        course_id = input("Course ID: ").strip()
-        if course_id:
-            return course_id
 
 
 def main():
@@ -74,9 +34,15 @@ def main():
     coursework_id = coursework["id"]
 
     rubric = classroom.get_rubric(course_id, coursework_id)
-    if not rubric or not rubric.criteria:
-        print("This assignment has no Classroom rubric attached - calibration needs one.")
-        return
+    assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
+    if rubric and rubric.criteria:
+        grading_instructions = coursework.get("description", "")
+    else:
+        print("This assignment has no Classroom rubric attached; you'll provide custom grading guidance.")
+        grading_instructions = input(
+            "Enter any additional grading instructions for this assignment (leave blank to just use the assignment description): "
+        ).strip()
+        rubric = None
 
     submissions = classroom.list_turned_in_submissions(course_id, coursework_id)
     if not submissions:
@@ -108,13 +74,18 @@ def main():
         if choice != "y":
             continue
 
-        criterion_scores = {}
-        for c in rubric.criteria:
-            print(f"\nCriterion: {c.title} (0-{c.max_score})")
-            for lvl in sorted(c.levels, key=lambda l: -l.score):
-                print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
-            score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
-            criterion_scores[c.id] = {"score": score}
+        if rubric and rubric.criteria:
+            criterion_scores = {}
+            for c in rubric.criteria:
+                print(f"\nCriterion: {c.title} (0-{c.max_score})")
+                for lvl in sorted(c.levels, key=lambda l: -l.score):
+                    print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
+                score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
+                criterion_scores[c.id] = {"score": score}
+        else:
+            print(f"\nOverall score (0-{assignment_max_points}):")
+            score = prompt_int("Your overall score for this essay: ", 0, int(assignment_max_points))
+            criterion_scores = {"overall": {"score": score}}
 
         feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
 
@@ -123,6 +94,7 @@ def main():
             "essay_text": essay_text,
             "criterion_scores": criterion_scores,
             "feedback_summary": feedback_summary,
+            "grading_instructions": grading_instructions,
         })
         print(f"Saved calibration example for {student_name}.\n")
 
