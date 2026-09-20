@@ -29,9 +29,11 @@ class ClassroomClient:
         out = []
         page_token = None
         while True:
-            req = self.service.courses().list(pageSize=100, pageToken=page_token)
+            req = self.service.courses().list(pageSize=100, pageToken=page_token, courseStates=["ACTIVE"])
             resp = req.execute()
-            out.extend(resp.get("courses", []))
+            for course in resp.get("courses", []):
+                if course.get("courseState") in (None, "ACTIVE"):
+                    out.append(course)
             page_token = resp.get("nextPageToken")
             if not page_token:
                 return out
@@ -78,6 +80,19 @@ class ClassroomClient:
                 description=c.get("description", ""), levels=levels,
             ))
         return Rubric(id=r["id"], course_id=course_id, coursework_id=coursework_id, criteria=criteria)
+
+    def get_coursework_max_points(self, course_id: str, coursework_id: str) -> float:
+        try:
+            coursework = self.service.courses().courseWork().get(courseId=course_id, id=coursework_id).execute()
+        except HttpError:
+            return 100.0
+        max_points = coursework.get("maxPoints")
+        if max_points is None:
+            return 100.0
+        try:
+            return float(max_points)
+        except (TypeError, ValueError):
+            return 100.0
 
     def list_turned_in_submissions(self, course_id: str, coursework_id: str) -> list[Submission]:
         out = []

@@ -10,7 +10,8 @@ from models import CriterionScore, GradeResult, Rubric, RubricCriterion, RubricL
 log = logging.getLogger("grading_prompt")
 
 
-def make_fallback_rubric() -> Rubric:
+def make_fallback_rubric(max_points: float = 100.0) -> Rubric:
+    max_points = max(float(max_points), 1.0)
     return Rubric(
         id="fallback-rubric",
         course_id="",
@@ -22,9 +23,9 @@ def make_fallback_rubric() -> Rubric:
                 description="Use the assignment prompt and any additional teacher guidance to evaluate the essay as a whole.",
                 levels=[
                     RubricLevel(score=0, title="Missing", description="No meaningful response."),
-                    RubricLevel(score=50, title="Developing", description="Basic response with major gaps."),
-                    RubricLevel(score=75, title="Proficient", description="Solid response that meets most expectations."),
-                    RubricLevel(score=100, title="Excellent", description="Outstanding response that fully meets the task."),
+                    RubricLevel(score=max_points * 0.5, title="Developing", description="Basic response with major gaps."),
+                    RubricLevel(score=max_points * 0.75, title="Proficient", description="Solid response that meets most expectations."),
+                    RubricLevel(score=max_points, title="Excellent", description="Outstanding response that fully meets the task."),
                 ],
             )
         ],
@@ -155,9 +156,10 @@ def grade_essay(
     assignment_instructions: str,
     essay_text: str,
     calibration_examples: list[dict] | None = None,
+    fallback_max_points: float = 100.0,
 ) -> GradeResult:
     if rubric is None or not rubric.criteria:
-        rubric = make_fallback_rubric()
+        rubric = make_fallback_rubric(fallback_max_points)
     validate_rubric(rubric)
     schema = _build_schema(rubric)
     prompt = _build_prompt(rubric, assignment_title, assignment_instructions, essay_text, calibration_examples)

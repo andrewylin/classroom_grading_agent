@@ -1,7 +1,7 @@
 import unittest
 
 from classroom_client import ClassroomClient
-from grader import _build_prompt, _build_schema, validate_rubric
+from grader import _build_prompt, _build_schema, make_fallback_rubric, validate_rubric
 from models import CriterionScore, Rubric, RubricCriterion, RubricLevel, Submission
 from pipeline import sort_submissions_by_student_first_name
 
@@ -64,6 +64,34 @@ class GradingModelTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             validate_rubric(rubric)
+
+    def test_fallback_rubric_uses_assignment_max_points(self):
+        rubric = make_fallback_rubric(15)
+        self.assertEqual(15, rubric.max_total)
+        self.assertEqual(15, rubric.criteria[0].max_score)
+
+    def test_list_courses_filters_out_archived_courses(self):
+        class FakeListCall:
+            def execute(self):
+                return {"courses": [{"id": "a", "courseState": "ARCHIVED"}, {"id": "b", "courseState": "ACTIVE"}], "nextPageToken": None}
+
+        class FakeCourses:
+            def list(self, pageSize, pageToken=None, courseStates=None):
+                self.last_states = courseStates
+                return FakeListCall()
+
+        class FakeService:
+            def __init__(self):
+                self.courses_obj = FakeCourses()
+
+            def courses(self):
+                return self.courses_obj
+
+        client = ClassroomClient.__new__(ClassroomClient)
+        client.service = FakeService()
+        courses = client.list_courses()
+        self.assertEqual(["b"], [c["id"] for c in courses])
+        self.assertEqual(["ACTIVE"], client.service.courses_obj.last_states)
 
     def test_criterion_score_keeps_justification_field(self):
         score = CriterionScore(

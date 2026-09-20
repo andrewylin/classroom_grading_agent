@@ -49,6 +49,7 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
     instructions = coursework.get("description", "")
 
     rubric = classroom.get_rubric(course_id, coursework_id)
+    assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
     if rubric and rubric.criteria:
         assignment_instructions = instructions
         calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
@@ -88,7 +89,14 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
 
             log.info("Grading submission %s", sub.submission_id)
             essay_text = drive.export_text(sub.drive_file_id)
-            result = grade_essay(rubric, title, assignment_instructions, essay_text, calibration_examples)
+            result = grade_essay(
+                rubric,
+                title,
+                assignment_instructions,
+                essay_text,
+                calibration_examples,
+                fallback_max_points=assignment_max_points,
+            )
             result.submission_id = sub.submission_id
 
             if sub.student_user_id not in student_name_cache:

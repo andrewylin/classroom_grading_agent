@@ -34,6 +34,7 @@ def main():
     coursework_id = coursework["id"]
 
     rubric = classroom.get_rubric(course_id, coursework_id)
+    assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
     if rubric and rubric.criteria:
         grading_instructions = coursework.get("description", "")
     else:
@@ -82,8 +83,8 @@ def main():
                 score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
                 criterion_scores[c.id] = {"score": score}
         else:
-            print("\nOverall score (0-100):")
-            score = prompt_int("Your overall score for this essay: ", 0, 100)
+            print(f"\nOverall score (0-{assignment_max_points}):")
+            score = prompt_int("Your overall score for this essay: ", 0, int(assignment_max_points))
             criterion_scores = {"overall": {"score": score}}
 
         feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
