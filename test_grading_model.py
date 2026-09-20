@@ -1,12 +1,13 @@
 import unittest
 
-from grader import _build_schema, make_fallback_rubric
+from classroom_client import ClassroomClient
+from grader import _build_prompt, _build_schema, validate_rubric
 from models import CriterionScore, Rubric, RubricCriterion, RubricLevel, Submission
 from pipeline import sort_submissions_by_student_first_name
 
 
 class GradingModelTests(unittest.TestCase):
-    def test_schema_omits_criterion_justification(self):
+    def test_schema_includes_criterion_justification(self):
         rubric = Rubric(
             id="rubric-1",
             course_id="course-1",
@@ -21,18 +22,60 @@ class GradingModelTests(unittest.TestCase):
             ],
         )
         schema = _build_schema(rubric)
-        self.assertNotIn("justification", schema["properties"]["criteria"]["properties"]["c1"]["properties"])
+        self.assertIn("justification", schema["properties"]["criteria"]["properties"]["c1"]["properties"])
 
-    def test_criterion_score_has_no_justification_field(self):
-        score = CriterionScore(criterion_id="c1", criterion_title="Title", score=3, max_score=4)
+    def test_prompt_truncates_long_essays(self):
+        rubric = Rubric(
+            id="rubric-1",
+            course_id="course-1",
+            coursework_id="cw-1",
+            criteria=[
+                RubricCriterion(
+                    id="c1",
+                    title="Title",
+                    description="Desc",
+                    levels=[RubricLevel(score=0, title="Low", description=""), RubricLevel(score=4, title="High", description="")],
+                )
+            ],
+        )
+        prompt = _build_prompt(
+            rubric,
+            "Essay",
+            "Write an essay",
+            "A" * 50000,
+            calibration_examples=[],
+        )
+        self.assertIn("[truncated", prompt)
+        self.assertLess(len(prompt), 25000)
+
+    def test_zero_point_rubric_is_rejected(self):
+        rubric = Rubric(
+            id="rubric-1",
+            course_id="course-1",
+            coursework_id="cw-1",
+            criteria=[
+                RubricCriterion(
+                    id="c1",
+                    title="Title",
+                    description="Desc",
+                    levels=[RubricLevel(score=0, title="Low", description=""), RubricLevel(score=0, title="High", description="")],
+                )
+            ],
+        )
+        with self.assertRaises(ValueError):
+            validate_rubric(rubric)
+
+    def test_criterion_score_keeps_justification_field(self):
+        score = CriterionScore(
+            criterion_id="c1",
+            criterion_title="Title",
+            score=3,
+            max_score=4,
+            justification="Strong evidence and clear reasoning.",
+        )
         self.assertEqual(score.score, 3)
         self.assertEqual(score.max_score, 4)
-        self.assertFalse(hasattr(score, "justification"))
-
-    def test_fallback_rubric_used_for_rubricless_assignments(self):
-        rubric = make_fallback_rubric()
-        self.assertEqual(rubric.criteria[0].id, "overall")
-        self.assertEqual(rubric.max_total, 100)
+        self.assertEqual(score.justification, "Strong evidence and clear reasoning.")
 
     def test_submissions_are_sorted_by_student_first_name(self):
         class FakeClassroom:

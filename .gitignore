@@ -3,5 +3,5 @@ client_secret.json
 token.json
 grading_recommendations.csv
 grading_state.sqlite3
-calibration/*.json
+calibration/
 /__pycache__

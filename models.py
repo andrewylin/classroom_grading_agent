@@ -1,5 +1,5 @@
 """Core data structures shared across the grading pipeline."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -51,6 +51,7 @@ class CriterionScore:
     criterion_title: str
     score: int
     max_score: int
+    justification: str | None = None
 
 
 @dataclass
