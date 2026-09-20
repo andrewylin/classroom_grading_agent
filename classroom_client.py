@@ -15,16 +15,6 @@ class ClassroomClient:
     def __init__(self, credentials):
         self.service = build("classroom", "v1", credentials=credentials)
 
-    @staticmethod
-    def validate_rubric(rubric: Rubric | None) -> None:
-        if rubric is None or not rubric.criteria:
-            raise ValueError("Rubric missing or empty; cannot grade without a rubric.")
-        for c in rubric.criteria:
-            if c.max_score <= 0:
-                raise ValueError(f"Rubric criterion '{c.title}' has max_score {c.max_score}; refusing to grade.")
-        if rubric.max_total <= 0:
-            raise ValueError(f"Rubric total score is {rubric.max_total}; refusing to grade.")
-
     def list_courses(self) -> list[dict]:
         out = []
         page_token = None
@@ -81,18 +71,21 @@ class ClassroomClient:
             ))
         return Rubric(id=r["id"], course_id=course_id, coursework_id=coursework_id, criteria=criteria)
 
-    def get_coursework_max_points(self, course_id: str, coursework_id: str) -> float:
+    def get_coursework_max_points(self, course_id: str, coursework_id: str) -> float | None:
         try:
-            coursework = self.service.courses().courseWork().get(courseId=course_id, id=coursework_id).execute()
-        except HttpError:
-            return 100.0
+            if hasattr(self.service, "courses"):
+                coursework = self.service.courses().courseWork().get(courseId=course_id, id=coursework_id).execute()
+            else:
+                coursework = self.service.courseWork().get(courseId=course_id, id=coursework_id).execute()
+        except (AttributeError, HttpError):
+            return None
         max_points = coursework.get("maxPoints")
         if max_points is None:
-            return 100.0
+            return None
         try:
             return float(max_points)
         except (TypeError, ValueError):
-            return 100.0
+            return None
 
     def list_turned_in_submissions(self, course_id: str, coursework_id: str) -> list[Submission]:
         out = []

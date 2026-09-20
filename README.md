@@ -17,6 +17,13 @@ become few-shot examples that steer the model toward your actual grading
 standards for that specific assignment, rather than some generic notion of
 "good writing."
 
+If a Classroom assignment has no rubric attached, the app still supports a
+fallback grading mode: it reads the assignment's `maxPoints` from Google
+Classroom when available, builds a single overall-quality criterion scaled to
+that total, and asks you for any extra grading guidance needed to anchor the
+rubricless evaluation. When `maxPoints` is unavailable, it falls back to a
+100-point default but logs that warning so the missing metadata is visible.
+
 ## How it works
 
 1. You run the script manually whenever you want to grade a single assignment.
@@ -91,14 +98,15 @@ submissions so the model has real examples of your standards to match:
 python calibrate.py
 ```
 
-This asks for a course ID and lists its assignments; pick one with a
-rubric attached. It then walks through turned-in submissions one at a
-time — for each one you choose to use, you enter your own per-criterion
-scores and an overall feedback summary. 2–4 examples per assignment is
-usually enough. These are saved to `calibration/<coursework_id>.json` and
-automatically picked up by `pipeline.py` the next time it grades that
-assignment — and those specific submissions are skipped by the main
-pipeline, since you've already graded them yourself.
+This asks for a course ID and lists its assignments. If an assignment has a
+Classroom rubric, you can enter per-criterion scores. If it does not, the
+script falls back to a single overall score scaled to the assignment's max
+points when available, and it still lets you add custom grading guidance.
+2–4 examples per assignment is usually enough. These are saved to
+`calibration/<coursework_id>.json` and automatically picked up by
+`pipeline.py` the next time it grades that assignment — and those specific
+submissions are skipped by the main pipeline, since you've already graded
+those yourself.
 
 ## 5. Run the grader for one assignment
 

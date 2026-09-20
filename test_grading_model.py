@@ -93,6 +93,22 @@ class GradingModelTests(unittest.TestCase):
         self.assertEqual(["b"], [c["id"] for c in courses])
         self.assertEqual(["ACTIVE"], client.service.courses_obj.last_states)
 
+    def test_missing_max_points_returns_none(self):
+        class FakeCourseWork:
+            def get(self, courseId, id):
+                class Resp:
+                    def execute(self):
+                        return {"id": "cw-1", "title": "No points assignment"}
+                return Resp()
+
+        class FakeService:
+            def courseWork(self):
+                return FakeCourseWork()
+
+        client = ClassroomClient.__new__(ClassroomClient)
+        client.service = FakeService()
+        self.assertIsNone(client.get_coursework_max_points("course-1", "cw-1"))
+
     def test_criterion_score_keeps_justification_field(self):
         score = CriterionScore(
             criterion_id="c1",

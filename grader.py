@@ -10,7 +10,9 @@ from models import CriterionScore, GradeResult, Rubric, RubricCriterion, RubricL
 log = logging.getLogger("grading_prompt")
 
 
-def make_fallback_rubric(max_points: float = 100.0) -> Rubric:
+def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
+    if max_points is None:
+        max_points = 100.0
     max_points = max(float(max_points), 1.0)
     return Rubric(
         id="fallback-rubric",
@@ -156,9 +158,11 @@ def grade_essay(
     assignment_instructions: str,
     essay_text: str,
     calibration_examples: list[dict] | None = None,
-    fallback_max_points: float = 100.0,
+    fallback_max_points: float | None = 100.0,
 ) -> GradeResult:
     if rubric is None or not rubric.criteria:
+        if fallback_max_points is None:
+            log.warning("No rubric and no Classroom maxPoints are available; using a default 100-point fallback.")
         rubric = make_fallback_rubric(fallback_max_points)
     validate_rubric(rubric)
     schema = _build_schema(rubric)
