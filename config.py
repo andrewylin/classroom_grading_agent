@@ -23,7 +23,7 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen3:8b")
 MODEL_THINKING = _bool("MODEL_THINKING", False)  # off by default - CPU-only thinking mode is very slow
 MODEL_TIMEOUT_SECONDS = int(os.getenv("MODEL_TIMEOUT_SECONDS", "1800"))
-MODEL_CTX_SIZE = int(os.getenv("MODEL_CTX_SIZE", "8192"))
+MODEL_CTX_SIZE = int(os.getenv("MODEL_CTX_SIZE", "16384"))
 
 # Prompt budgeting. These caps keep long essays / calibration blocks from
 # silently overflowing the local model context window without a visible warning.
@@ -31,7 +31,6 @@ MAX_ESSAY_CHARS = int(os.getenv("MAX_ESSAY_CHARS", "12000"))
 MAX_CALIBRATION_CHARS = int(os.getenv("MAX_CALIBRATION_CHARS", "2500"))
 
 # Pipeline behavior
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
 DB_PATH = os.getenv("DB_PATH", "grading_state.sqlite3")
 OUTPUT_PATH = os.getenv("OUTPUT_PATH", "grading_recommendations.csv")
 CALIBRATION_DIR = os.getenv("CALIBRATION_DIR", "calibration")

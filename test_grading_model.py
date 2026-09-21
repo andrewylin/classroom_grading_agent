@@ -1,6 +1,7 @@
 import unittest
 
 from classroom_client import ClassroomClient
+from drive_client import DriveClient
 from grader import _build_prompt, _build_schema, make_fallback_rubric, validate_rubric
 from models import CriterionScore, Rubric, RubricCriterion, RubricLevel, Submission
 from pipeline import sort_submissions_by_student_first_name
@@ -92,6 +93,84 @@ class GradingModelTests(unittest.TestCase):
         courses = client.list_courses()
         self.assertEqual(["b"], [c["id"] for c in courses])
         self.assertEqual(["ACTIVE"], client.service.courses_obj.last_states)
+
+    def test_missing_max_points_returns_none(self):
+        class FakeCourseWork:
+            def get(self, courseId, id):
+                class Resp:
+                    def execute(self):
+                        return {"id": "cw-1", "title": "No points assignment"}
+                return Resp()
+
+        class FakeCourses:
+            def courseWork(self):
+                return FakeCourseWork()
+
+        class FakeService:
+            def courses(self):
+                return FakeCourses()
+
+        client = ClassroomClient.__new__(ClassroomClient)
+        client.service = FakeService()
+        self.assertIsNone(client.get_coursework_max_points("course-1", "cw-1"))
+
+    def test_classroom_get_student_name_retries_after_socket_error(self):
+        class FakeProfileRequest:
+            def __init__(self):
+                self.calls = 0
+
+            def execute(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise OSError("[Errno 49] Can't assign requested address")
+                return {"name": {"fullName": "Ada Lovelace"}}
+
+        class FakeUserProfiles:
+            def __init__(self):
+                self.request = FakeProfileRequest()
+
+            def get(self, userId):
+                return self.request
+
+        class FakeService:
+            def __init__(self):
+                self.user_profiles = FakeUserProfiles()
+
+            def userProfiles(self):
+                return self.user_profiles
+
+        client = ClassroomClient.__new__(ClassroomClient)
+        client.service = FakeService()
+        self.assertEqual("Ada Lovelace", client.get_student_name("user-1"))
+
+    def test_drive_revision_id_retries_after_socket_error(self):
+        class FakeGet:
+            def __init__(self):
+                self.calls = 0
+
+            def execute(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise OSError("[Errno 49] Can't assign requested address")
+                return {"headRevisionId": "rev-123"}
+
+        class FakeFiles:
+            def __init__(self):
+                self.get_obj = FakeGet()
+
+            def get(self, fileId, fields):
+                return self.get_obj
+
+        class FakeService:
+            def __init__(self):
+                self.files_obj = FakeFiles()
+
+            def files(self):
+                return self.files_obj
+
+        client = DriveClient.__new__(DriveClient)
+        client.service = FakeService()
+        self.assertEqual("rev-123", client.get_revision_id("file-1"))
 
     def test_criterion_score_keeps_justification_field(self):
         score = CriterionScore(
