@@ -102,13 +102,46 @@ class GradingModelTests(unittest.TestCase):
                         return {"id": "cw-1", "title": "No points assignment"}
                 return Resp()
 
-        class FakeService:
+        class FakeCourses:
             def courseWork(self):
                 return FakeCourseWork()
+
+        class FakeService:
+            def courses(self):
+                return FakeCourses()
 
         client = ClassroomClient.__new__(ClassroomClient)
         client.service = FakeService()
         self.assertIsNone(client.get_coursework_max_points("course-1", "cw-1"))
+
+    def test_classroom_get_student_name_retries_after_socket_error(self):
+        class FakeProfileRequest:
+            def __init__(self):
+                self.calls = 0
+
+            def execute(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise OSError("[Errno 49] Can't assign requested address")
+                return {"name": {"fullName": "Ada Lovelace"}}
+
+        class FakeUserProfiles:
+            def __init__(self):
+                self.request = FakeProfileRequest()
+
+            def get(self, userId):
+                return self.request
+
+        class FakeService:
+            def __init__(self):
+                self.user_profiles = FakeUserProfiles()
+
+            def userProfiles(self):
+                return self.user_profiles
+
+        client = ClassroomClient.__new__(ClassroomClient)
+        client.service = FakeService()
+        self.assertEqual("Ada Lovelace", client.get_student_name("user-1"))
 
     def test_drive_revision_id_retries_after_socket_error(self):
         class FakeGet:

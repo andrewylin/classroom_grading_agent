@@ -4,11 +4,12 @@ No write methods here on purpose - this agent never touches student files.
 """
 import io
 import logging
-import time
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
+
+from retry_utils import retry_on_transient_error
 
 log = logging.getLogger("drive_client")
 
@@ -17,16 +18,8 @@ class DriveClient:
     def __init__(self, credentials):
         self.service = build("drive", "v3", credentials=credentials)
 
-    def _retry(self, action, description: str, max_retries: int = 3):
-        for attempt in range(max_retries):
-            try:
-                return action()
-            except (OSError, TimeoutError, ConnectionError, HttpError) as exc:
-                if attempt == max_retries - 1:
-                    raise
-                wait = 2 ** attempt
-                log.warning("Transient Google Drive error for %s (attempt %d/%d): %s; retrying in %s seconds", description, attempt + 1, max_retries, exc, wait)
-                time.sleep(wait)
+    def _retry(self, action, description: str, max_retries: int = 4):
+        return retry_on_transient_error(action, description, max_retries=max_retries)
 
     def get_revision_id(self, file_id: str) -> str:
         meta = self._retry(

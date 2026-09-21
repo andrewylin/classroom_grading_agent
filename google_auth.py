@@ -1,7 +1,6 @@
 """Handles the one-time OAuth consent flow and token refresh/caching."""
 import logging
 import os
-import time
 
 # Google sometimes returns a granted scope string that differs slightly from
 # what was requested (e.g. substituting a narrower, equivalent scope like
@@ -16,6 +15,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 import config
+from retry_utils import retry_on_transient_error
 
 log = logging.getLogger("google_auth")
 
@@ -27,16 +27,11 @@ def get_credentials() -> Credentials:
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            for attempt in range(3):
-                try:
-                    creds.refresh(Request())
-                    break
-                except Exception as exc:
-                    if attempt == 2:
-                        raise
-                    wait = 2 ** attempt
-                    log.warning("Token refresh failed (attempt %d/3); retrying in %s seconds: %s", attempt + 1, wait, exc)
-                    time.sleep(wait)
+            retry_on_transient_error(
+                lambda: creds.refresh(Request()),
+                "refreshing OAuth credentials",
+                max_retries=4,
+            )
         else:
             flow = InstalledAppFlow.from_client_secrets_file(config.CLIENT_SECRETS_PATH, config.SCOPES)
             # run_local_server opens your browser for the one-time consent screen.
