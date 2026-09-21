@@ -23,7 +23,7 @@ class ClassroomClient:
             req = self.service.courses().list(pageSize=100, pageToken=page_token, courseStates=["ACTIVE"])
             resp = retry_on_transient_error(
                 lambda: req.execute(),
-                f"listing courses for active course selection",
+                "listing courses for active course selection",
             )
             for course in resp.get("courses", []):
                 if course.get("courseState") in (None, "ACTIVE"):

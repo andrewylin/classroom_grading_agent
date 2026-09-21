@@ -1,12 +1,14 @@
 import logging
 import time
+from typing import Callable, TypeVar
 
 from googleapiclient.errors import HttpError
 
 log = logging.getLogger("retry_utils")
+T = TypeVar("T")
 
 
-def retry_on_transient_error(action, description: str, max_retries: int = 4):
+def retry_on_transient_error(action: Callable[[], T], description: str, max_retries: int = 4) -> T:
     for attempt in range(max_retries):
         try:
             return action()
@@ -23,3 +25,4 @@ def retry_on_transient_error(action, description: str, max_retries: int = 4):
                 wait,
             )
             time.sleep(wait)
+    raise RuntimeError(f"Retry loop exited unexpectedly for {description}")
