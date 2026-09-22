@@ -30,3 +30,24 @@ def append(recommendation: Recommendation):
             writer.writeheader()
         row = recommendation.to_row()
         writer.writerow({k: _sanitize_csv_field(v) for k, v in row.items()})
+
+
+def already_graded_submission_ids(course_id: str, coursework_title: str, output_path: str | None = None) -> set[str]:
+    path = output_path or config.OUTPUT_PATH
+    if not os.path.exists(path):
+        return set()
+
+    graded = set()
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            return graded
+
+        for row in reader:
+            if not row:
+                continue
+            if row.get("course_id") == course_id and row.get("coursework_title") == coursework_title:
+                submission_id = (row.get("submission_id") or "").strip()
+                if submission_id:
+                    graded.add(submission_id)
+    return graded

@@ -66,6 +66,13 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
         rubric = None
 
     calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
+    already_graded_ids = report_writer.already_graded_submission_ids(course_id, title)
+    regrade_already_graded = False
+    if already_graded_ids:
+        print(f"{len(already_graded_ids)} submission(s) already graded for this assignment in {config.OUTPUT_PATH}.")
+        response = input("Regrade already-graded submissions? [y/N]: ").strip().lower()
+        regrade_already_graded = response in {"y", "yes"}
+
     student_name_cache = {}
     submissions = sort_submissions_by_student_first_name(
         classroom,
@@ -78,6 +85,9 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
     failed_count = 0
     for sub in submissions:
         if sub.submission_id in calibrated_ids:
+            skipped_count += 1
+            continue
+        if sub.submission_id in already_graded_ids and not regrade_already_graded:
             skipped_count += 1
             continue
 

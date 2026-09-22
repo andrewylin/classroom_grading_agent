@@ -7,6 +7,7 @@ Run: python calibrate.py
 """
 import config
 import calibration_store
+import report_writer
 from classroom_client import ClassroomClient
 from cli import prompt_int, select_course_id
 from drive_client import DriveClient
@@ -50,7 +51,12 @@ def main():
         return
 
     already = calibration_store.calibrated_submission_ids(coursework_id)
-    print(f"\n{len(submissions)} turned-in submission(s). {len(already)} already calibrated for this assignment.\n")
+    already_graded = report_writer.already_graded_submission_ids(course_id, coursework.get("title", ""))
+    print(
+        f"\n{len(submissions)} turned-in submission(s). "
+        f"{len(already)} already calibrated for this assignment. "
+        f"{len(already_graded)} already graded for this assignment in {config.OUTPUT_PATH}.\n"
+    )
 
     for sub in submissions:
         if sub.submission_id in already:

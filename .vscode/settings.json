@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^\\.venv/bin/python -m unittest test_grading_model\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
