@@ -285,22 +285,21 @@ class GradingModelTests(unittest.TestCase):
         self.assertFalse(grader.should_use_custom_rubric("Write a 5-page essay and include 3 quotes; -5 per missing citation.", "Write an essay"))
         self.assertTrue(grader.should_use_custom_rubric("Use the saved instructions for this assignment.", "Write an essay", explicit_opt_in=True))
 
-    def test_build_custom_rubric_from_instructions_uses_point_deduction_rules(self):
+    def test_build_custom_rubric_from_instructions_uses_instruction_topics(self):
         instructions = (
-            "there are 10 entries each submission should have. if the quotes are not integrated with context -5, "
-            "if any entry is missing -4 for each missing entry, there should also be 5 sets of 3 discussion questions, "
-            "-1 for each set of questions missing, if everything is there but most entries don't have depth, they should not "
-            "get above 35/50. if only few entries lack depth, they will likely get around 40/50. after every quote there should be a citation."
+            "Write a persuasive essay with a clear thesis, at least 3 body paragraphs, and two sources. "
+            "Use evidence from the text and explain how each quote supports the argument. "
+            "End with a conclusion that restates the claim."
         )
         rubric = grader.build_custom_rubric_from_instructions(instructions, max_points=50)
 
         self.assertEqual(50, rubric.max_total)
-        texts = "\n".join(c.description for c in rubric.criteria)
-        self.assertIn("10 entries", texts)
-        self.assertIn("Deduct 5 points", texts)
-        self.assertIn("Deduct 4 points", texts)
-        self.assertIn("35", texts)
-        self.assertIn("40", texts)
+        joined = "\n".join(c.title.lower() + " " + c.description.lower() for c in rubric.criteria)
+        self.assertIn("thesis", joined)
+        self.assertIn("evidence", joined)
+        self.assertIn("source", joined)
+        self.assertNotIn("discussion questions", joined)
+        self.assertNotIn("required entries", joined)
 
     def test_run_once_no_rubric_with_saved_instructions_prompts_once_and_persists_replacement(self):
         class FakeClassroom:
