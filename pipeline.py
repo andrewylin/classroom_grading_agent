@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+from typing import Protocol
 
 import calibration_store
 import config
@@ -30,7 +31,12 @@ def select_coursework(classroom: ClassroomClient, course_id: str):
     return courseworks[idx]
 
 
-def sort_submissions_by_student_first_name(classroom: ClassroomClient, submissions: list, name_cache: dict | None = None) -> list:
+class StudentNameProvider(Protocol):
+    def get_student_name(self, user_id: str) -> str:
+        ...
+
+
+def sort_submissions_by_student_first_name(classroom: StudentNameProvider, submissions: list, name_cache: dict | None = None) -> list:
     cache = name_cache if name_cache is not None else {}
 
     def first_name_key(submission):
