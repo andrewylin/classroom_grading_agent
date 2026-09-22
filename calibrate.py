@@ -20,6 +20,7 @@ ESSAY_PREVIEW_CHARS = 3000
 def select_submission_for_calibration(
     submissions: list[Submission],
     already_calibrated_ids: set[str],
+    get_student_name,
     input_func=input,
 ) -> Submission | None:
     available: list[Submission] = [sub for sub in submissions if sub.submission_id not in already_calibrated_ids]
@@ -28,7 +29,8 @@ def select_submission_for_calibration(
 
     print("\nAvailable submissions for calibration:")
     for i, sub in enumerate(available):
-        print(f"  [{i}] submission {sub.submission_id} (student user {sub.student_user_id})")
+        student_name = get_student_name(sub.student_user_id)
+        print(f"  [{i}] {student_name} (submission {sub.submission_id})")
 
     while True:
         raw = input_func("\nPick a submission number to calibrate: ").strip()
@@ -87,7 +89,7 @@ def main():
         f"{len(already_graded)} already graded for this assignment in {config.OUTPUT_PATH}.\n"
     )
 
-    selected_submission = select_submission_for_calibration(submissions, already)
+    selected_submission = select_submission_for_calibration(submissions, already, classroom.get_student_name)
     if selected_submission is None:
         print("No remaining submissions left to calibrate for this assignment.")
         return

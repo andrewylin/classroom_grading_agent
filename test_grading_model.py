@@ -216,7 +216,12 @@ class GradingModelTests(unittest.TestCase):
         ]
         inputs = iter(["0"])
 
-        selected = calibrate.select_submission_for_calibration(submissions, {"s-2"}, input_func=lambda msg: next(inputs))
+        selected = calibrate.select_submission_for_calibration(
+            submissions,
+            {"s-2"},
+            get_student_name=lambda user_id: {"u-1": "Alice Brown", "u-2": "Bob Chen", "u-3": "Carol Diaz"}[user_id],
+            input_func=lambda msg: next(inputs),
+        )
 
         if selected is None:
             self.fail("Expected a submission to be selected for calibration")
