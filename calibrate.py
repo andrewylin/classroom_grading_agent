@@ -12,12 +12,17 @@ from classroom_client import ClassroomClient
 from cli import prompt_int, select_course_id
 from drive_client import DriveClient
 from google_auth import get_credentials
+from models import Submission
 
 ESSAY_PREVIEW_CHARS = 3000
 
 
-def select_submission_for_calibration(submissions, already_calibrated_ids, input_func=input):
-    available = [sub for sub in submissions if sub.submission_id not in already_calibrated_ids]
+def select_submission_for_calibration(
+    submissions: list[Submission],
+    already_calibrated_ids: set[str],
+    input_func=input,
+) -> Submission | None:
+    available: list[Submission] = [sub for sub in submissions if sub.submission_id not in already_calibrated_ids]
     if not available:
         return None
 
