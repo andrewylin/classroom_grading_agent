@@ -1,6 +1,7 @@
 """Talks to the local Ollama server to grade one essay against one rubric."""
 import json
 import logging
+import re
 
 import requests
 
@@ -8,6 +9,30 @@ import config
 from models import CriterionScore, GradeResult, Rubric, RubricCriterion, RubricLevel
 
 log = logging.getLogger("grading_prompt")
+
+
+def _score_band_points(max_points: float | None = 100.0) -> list[int]:
+    total = max(float(max_points or 100.0), 1.0)
+    raw_weights = [0.40, 0.30, 0.20, 0.10]
+    scores = [int(round(total * weight)) for weight in raw_weights]
+    scores[-1] = int(total - sum(scores[:-1]))
+    return scores
+
+
+def _has_point_deduction_language(text: str) -> bool:
+    lowered = (text or "").lower()
+    if not lowered:
+        return False
+    patterns = [
+        r"-\d+",
+        r"\d+/\d+",
+        r"missing\s+(entry|quote|set|question)",
+        r"deduct",
+        r"quote.*context",
+        r"discussion questions",
+        r"entries?\s+should\s+have",
+    ]
+    return any(re.search(pattern, lowered) for pattern in patterns)
 
 
 def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
@@ -32,6 +57,86 @@ def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
             )
         ],
     )
+
+
+def build_custom_rubric_from_instructions(instructions: str, max_points: float | None = 100.0) -> Rubric:
+    text = (instructions or "").strip()
+    total = max(float(max_points or 100.0), 1.0)
+    score_parts = _score_band_points(total)
+
+    entry_count_match = re.search(r"(\d+)\s+entries?", text, re.IGNORECASE)
+    entry_count = int(entry_count_match.group(1)) if entry_count_match else 10
+    quote_deduction = 5 if re.search(r"-\s*5|\-5|5\s*points?\s*for.*quote.*context|not integrated with context", text, re.IGNORECASE) else 0
+    missing_entry_deduction = 4 if re.search(r"-\s*4|\-4|4\s*points?\s*for\s+each\s+missing\s+entry|missing\s+entry", text, re.IGNORECASE) else 0
+    missing_question_set_deduction = 1 if re.search(r"-\s*1|\-1|1\s*point.*each\s+missing.*set|missing.*set.*questions", text, re.IGNORECASE) else 0
+    depth_cap_low = 35 if re.search(r"35/50|35\s*/\s*50|35/50.*most.*depth|most entries.*depth", text, re.IGNORECASE) else None
+    depth_cap_mid = 40 if re.search(r"40/50|40\s*/\s*50|few entries.*depth|only.*few.*depth", text, re.IGNORECASE) else None
+
+    criteria = [
+        RubricCriterion(
+            id="required_elements",
+            title="Required entries and completeness",
+            description=(
+                f"Check whether the response contains the required {entry_count} entries. "
+                f"Deduct {missing_entry_deduction} points for each missing entry. "
+                f"Deduct {quote_deduction} points when a quote is not integrated with context. "
+                f"Every quote should be followed by a citation."
+            ),
+            levels=[
+                RubricLevel(score=0, title="Missing major elements", description="Several required entries are absent, uncontextualized, or uncited."),
+                RubricLevel(score=score_parts[0] // 2, title="Partially complete", description="Most required content is there, but multiple elements are missing or weak."),
+                RubricLevel(score=score_parts[0] * 3 // 4, title="Mostly complete", description="Minor gaps remain, but the required structure is mostly present."),
+                RubricLevel(score=score_parts[0], title="Complete", description="All required entries are present and properly contextualized."),
+            ],
+        ),
+        RubricCriterion(
+            id="quote_integration",
+            title="Quote integration and citations",
+            description=(
+                "Evaluate whether each quote is woven into the response with context and explanation. "
+                "If a quote is dropped in without setting up the idea or without a citation, score down. "
+                "The strongest responses connect quotes to a clear claim, analysis, or reflection."
+            ),
+            levels=[
+                RubricLevel(score=0, title="Weak integration", description="Quotes are inserted without context, explanation, or citation."),
+                RubricLevel(score=score_parts[1] // 2, title="Mixed integration", description="Some quotes are integrated, but several are unsupported or under-explained."),
+                RubricLevel(score=score_parts[1] * 3 // 4, title="Generally integrated", description="Most quotes are contextualized and cited."),
+                RubricLevel(score=score_parts[1], title="Strong integration", description="Quotes are clearly contextualized, analyzed, and cited."),
+            ],
+        ),
+        RubricCriterion(
+            id="discussion_questions",
+            title="Discussion questions",
+            description=(
+                "There should be 5 sets of 3 discussion questions. "
+                f"Deduct {missing_question_set_deduction} points for each missing set of questions. "
+                "A full set should be complete, relevant, and connected to the text."
+            ),
+            levels=[
+                RubricLevel(score=0, title="Missing sets", description="Several question sets are absent or incomplete."),
+                RubricLevel(score=score_parts[2] // 2, title="Partial sets", description="Some question sets are present but incomplete or shallow."),
+                RubricLevel(score=score_parts[2] * 3 // 4, title="Mostly complete", description="Most question sets are included and relevant."),
+                RubricLevel(score=score_parts[2], title="Complete", description="All required discussion-question sets are present and useful."),
+            ],
+        ),
+        RubricCriterion(
+            id="depth_and_analysis",
+            title="Depth and analytical quality",
+            description=(
+                "Reward thoughtful, evidence-based analysis rather than summary alone. "
+                f"If most entries lack depth, the submission should not score above {depth_cap_low or 'the cap'} on the full assignment. "
+                f"If only a few entries lack depth, a score around {depth_cap_mid or 'the middle cap'} is more appropriate. "
+                "High-performing work connects quotes to broader ideas, literary analysis, outside reading, or reflective questions."
+            ),
+            levels=[
+                RubricLevel(score=0, title="Very shallow", description="Most entries are thin, summary-based, or unsupported."),
+                RubricLevel(score=score_parts[3] // 2, title="Some depth", description="A few entries show analysis, but the overall response is still limited."),
+                RubricLevel(score=score_parts[3] * 3 // 4, title="Moderately deep", description="Several entries show real analysis and reflection."),
+                RubricLevel(score=score_parts[3], title="Strong depth", description="The response is consistently analytical, reflective, and evidence-based."),
+            ],
+        ),
+    ]
+    return Rubric(id="custom-instructions-rubric", course_id="", coursework_id="", criteria=criteria)
 
 
 def validate_rubric(rubric: Rubric) -> None:
@@ -161,9 +266,12 @@ def grade_essay(
     fallback_max_points: float | None = 100.0,
 ) -> GradeResult:
     if rubric is None or not rubric.criteria:
-        if fallback_max_points is None:
-            log.warning("No rubric and no Classroom maxPoints are available; using a default 100-point fallback.")
-        rubric = make_fallback_rubric(fallback_max_points)
+        if _has_point_deduction_language(assignment_instructions):
+            rubric = build_custom_rubric_from_instructions(assignment_instructions, fallback_max_points)
+        else:
+            if fallback_max_points is None:
+                log.warning("No rubric and no Classroom maxPoints are available; using a default 100-point fallback.")
+            rubric = make_fallback_rubric(fallback_max_points)
     validate_rubric(rubric)
     schema = _build_schema(rubric)
     prompt = _build_prompt(rubric, assignment_title, assignment_instructions, essay_text, calibration_examples)

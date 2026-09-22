@@ -9,6 +9,7 @@ from unittest import mock
 
 import calibrate
 import calibration_store
+import grader
 import pipeline
 import report_writer
 from classroom_client import ClassroomClient
@@ -278,6 +279,23 @@ class GradingModelTests(unittest.TestCase):
             input_func=lambda msg: next(prompts),
         )
         self.assertEqual("Assignment description", result)
+
+    def test_build_custom_rubric_from_instructions_uses_point_deduction_rules(self):
+        instructions = (
+            "there are 10 entries each submission should have. if the quotes are not integrated with context -5, "
+            "if any entry is missing -4 for each missing entry, there should also be 5 sets of 3 discussion questions, "
+            "-1 for each set of questions missing, if everything is there but most entries don't have depth, they should not "
+            "get above 35/50. if only few entries lack depth, they will likely get around 40/50. after every quote there should be a citation."
+        )
+        rubric = grader.build_custom_rubric_from_instructions(instructions, max_points=50)
+
+        self.assertEqual(50, rubric.max_total)
+        texts = "\n".join(c.description for c in rubric.criteria)
+        self.assertIn("10 entries", texts)
+        self.assertIn("Deduct 5 points", texts)
+        self.assertIn("Deduct 4 points", texts)
+        self.assertIn("35", texts)
+        self.assertIn("40", texts)
 
     def test_run_once_no_rubric_with_saved_instructions_prompts_once_and_persists_replacement(self):
         class FakeClassroom:
