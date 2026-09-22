@@ -1,6 +1,7 @@
 """Handles the one-time OAuth consent flow and token refresh/caching."""
 import logging
 import os
+from typing import cast
 
 # Google sometimes returns a granted scope string that differs slightly from
 # what was requested (e.g. substituting a narrower, equivalent scope like
@@ -39,4 +40,7 @@ def get_credentials() -> Credentials:
         with open(config.TOKEN_STORE_PATH, "w") as f:
             f.write(creds.to_json())
 
-    return creds
+    if not isinstance(creds, Credentials):
+        raise TypeError("Expected OAuth credentials in the Google token store.")
+
+    return cast(Credentials, creds)
