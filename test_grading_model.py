@@ -9,6 +9,7 @@ from unittest import mock
 
 import calibrate
 import calibration_store
+import grader
 import pipeline
 import report_writer
 from classroom_client import ClassroomClient
@@ -278,6 +279,39 @@ class GradingModelTests(unittest.TestCase):
             input_func=lambda msg: next(prompts),
         )
         self.assertEqual("Assignment description", result)
+
+    def test_should_use_custom_rubric_requires_explicit_opt_in(self):
+        self.assertFalse(grader.should_use_custom_rubric("Read the essay and grade it", "Write an essay"))
+        self.assertFalse(grader.should_use_custom_rubric("Write a 5-page essay and include 3 quotes; -5 per missing citation.", "Write an essay"))
+        self.assertTrue(grader.should_use_custom_rubric("Use the saved instructions for this assignment.", "Write an essay", explicit_opt_in=True))
+
+    def test_build_custom_rubric_from_instructions_uses_instruction_topics(self):
+        instructions = (
+            "Write a persuasive essay with a clear thesis, at least 3 body paragraphs, and two sources. "
+            "Use evidence from the text and explain how each quote supports the argument. "
+            "End with a conclusion that restates the claim."
+        )
+        rubric = grader.build_custom_rubric_from_instructions(instructions, max_points=50)
+
+        self.assertEqual(50, rubric.max_total)
+        joined = "\n".join(c.title.lower() + " " + c.description.lower() for c in rubric.criteria)
+        self.assertIn("thesis", joined)
+        self.assertIn("evidence", joined)
+        self.assertIn("source", joined)
+        self.assertNotIn("discussion questions", joined)
+        self.assertNotIn("required entries", joined)
+
+    def test_build_custom_rubric_from_instructions_preserves_total_for_1_to_4_topics(self):
+        scenarios = [
+            ("Grade based on the quality of quotes used.", 1, 100),
+            ("Grade based on the quality of quotes and evidence used to support your claim.", 2, 100),
+            ("Use a thesis, include evidence, and organize your paragraphs clearly.", 3, 100),
+            ("Write a persuasive essay with a thesis, evidence, clear organization, and analysis of your reasoning.", 4, 100),
+        ]
+        for instructions, expected_count, max_points in scenarios:
+            rubric = grader.build_custom_rubric_from_instructions(instructions, max_points=max_points)
+            self.assertEqual(expected_count, len(rubric.criteria))
+            self.assertEqual(max_points, rubric.max_total)
 
     def test_run_once_no_rubric_with_saved_instructions_prompts_once_and_persists_replacement(self):
         class FakeClassroom:

@@ -1,6 +1,7 @@
 """Talks to the local Ollama server to grade one essay against one rubric."""
 import json
 import logging
+import re
 
 import requests
 
@@ -8,6 +9,38 @@ import config
 from models import CriterionScore, GradeResult, Rubric, RubricCriterion, RubricLevel
 
 log = logging.getLogger("grading_prompt")
+
+
+def _score_band_points(max_points: float | None = 100.0, num_criteria: int = 4) -> list[int]:
+    total = max(float(max_points or 100.0), 1.0)
+    if num_criteria <= 0:
+        return []
+    raw_weights = [0.40, 0.30, 0.20, 0.10, 0.05]
+    weights = raw_weights[:num_criteria]
+    if len(weights) < num_criteria:
+        while len(weights) < num_criteria:
+            weights.append(1.0 / num_criteria)
+    total_weight = sum(weights)
+    normalized = [weight / total_weight for weight in weights]
+    scores = [int(round(total * weight)) for weight in normalized]
+    scores[-1] = int(total - sum(scores[:-1]))
+    return scores
+
+
+def _has_point_deduction_language(text: str) -> bool:
+    """Never infer a custom rubric from free-form text. The assignment-specific
+    rubric is only allowed through an explicit opt-in path when the teacher has
+    confirmed custom grading instructions for the assignment."""
+    return False
+
+
+def should_use_custom_rubric(instructions: str, assignment_description: str, explicit_opt_in: bool = False) -> bool:
+    text = (instructions or "").strip()
+    if not text:
+        return False
+    if not explicit_opt_in:
+        return False
+    return bool(text)
 
 
 def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
@@ -25,13 +58,71 @@ def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
                 description="Use the assignment prompt and any additional teacher guidance to evaluate the essay as a whole.",
                 levels=[
                     RubricLevel(score=0, title="Missing", description="No meaningful response."),
-                    RubricLevel(score=max_points * 0.5, title="Developing", description="Basic response with major gaps."),
-                    RubricLevel(score=max_points * 0.75, title="Proficient", description="Solid response that meets most expectations."),
-                    RubricLevel(score=max_points, title="Excellent", description="Outstanding response that fully meets the task."),
+                    RubricLevel(score=int(round(max_points * 0.5)), title="Developing", description="Basic response with major gaps."),
+                    RubricLevel(score=int(round(max_points * 0.75)), title="Proficient", description="Solid response that meets most expectations."),
+                    RubricLevel(score=int(round(max_points)), title="Excellent", description="Outstanding response that fully meets the task."),
                 ],
             )
         ],
     )
+
+
+def build_custom_rubric_from_instructions(instructions: str, max_points: float | None = 100.0) -> Rubric:
+    text = (instructions or "").strip()
+    total = max(float(max_points or 100.0), 1.0)
+
+    lowered = text.lower()
+    topic_map = {
+        "argument": ["thesis", "claim", "argument", "position", "purpose"],
+        "evidence": ["evidence", "quote", "source", "citation", "support", "details"],
+        "organization": ["organization", "structure", "paragraph", "format", "introduction", "conclusion", "flow"],
+        "analysis": ["analysis", "explain", "reasoning", "reflection", "interpretation", "connect"],
+        "mechanics": ["grammar", "mechanics", "sentence", "style", "clarity", "conventions"],
+    }
+
+    matches = []
+    for criterion_id, keywords in topic_map.items():
+        if any(keyword in lowered for keyword in keywords):
+            matches.append(criterion_id)
+
+    if not matches:
+        return make_fallback_rubric(total)
+
+    selected = matches[:4]
+    score_parts = _score_band_points(total, len(selected))
+
+    criteria = []
+    for index, criterion_id in enumerate(selected):
+        title_map = {
+            "argument": "Thesis and argument",
+            "evidence": "Evidence and support",
+            "organization": "Organization and structure",
+            "analysis": "Reasoning and explanation",
+            "mechanics": "Clarity and mechanics",
+        }
+        description_map = {
+            "argument": "Evaluate whether the response states a clear position and develops a focused, defensible argument that answers the assignment prompt.",
+            "evidence": "Evaluate whether the response uses relevant evidence, examples, quotations, or sources to support the central claim and explain how they matter.",
+            "organization": "Evaluate whether the response is logically organized, clearly structured, and easy for a reader to follow from beginning to end.",
+            "analysis": "Evaluate whether the response explains ideas, makes connections, and shows reasoning beyond summary or surface description.",
+            "mechanics": "Evaluate whether the writing is clear, coherent, and polished enough to communicate ideas effectively.",
+        }
+        score = score_parts[index]
+        criteria.append(
+            RubricCriterion(
+                id=f"criterion_{index + 1}",
+                title=title_map[criterion_id],
+                description=description_map[criterion_id],
+                levels=[
+                    RubricLevel(score=0, title="Missing", description="This element is absent or not meaningfully present."),
+                    RubricLevel(score=score // 2, title="Developing", description="This element is present but uneven or incomplete."),
+                    RubricLevel(score=score * 3 // 4, title="Proficient", description="This element is generally well handled with minor weaknesses."),
+                    RubricLevel(score=score, title="Excellent", description="This element is strong, clear, and fully aligned with the assignment."),
+                ],
+            )
+        )
+
+    return Rubric(id="custom-instructions-rubric", course_id="", coursework_id="", criteria=criteria)
 
 
 def validate_rubric(rubric: Rubric) -> None:
@@ -159,11 +250,15 @@ def grade_essay(
     essay_text: str,
     calibration_examples: list[dict] | None = None,
     fallback_max_points: float | None = 100.0,
+    explicit_custom_rubric: bool = False,
 ) -> GradeResult:
     if rubric is None or not rubric.criteria:
-        if fallback_max_points is None:
-            log.warning("No rubric and no Classroom maxPoints are available; using a default 100-point fallback.")
-        rubric = make_fallback_rubric(fallback_max_points)
+        if should_use_custom_rubric(assignment_instructions, assignment_title, explicit_opt_in=explicit_custom_rubric):
+            rubric = build_custom_rubric_from_instructions(assignment_instructions, fallback_max_points)
+        else:
+            if fallback_max_points is None:
+                log.warning("No rubric and no Classroom maxPoints are available; using a default 100-point fallback.")
+            rubric = make_fallback_rubric(fallback_max_points)
     validate_rubric(rubric)
     schema = _build_schema(rubric)
     prompt = _build_prompt(rubric, assignment_title, assignment_instructions, essay_text, calibration_examples)

@@ -72,9 +72,17 @@ def run_once(
     saved_file = calibration_store.load_file(coursework_id)
     saved_grading_instructions = saved_file.get("grading_instructions", "").strip()
     should_persist_grading_instructions = False
+    explicit_custom_rubric = False
 
     if saved_grading_instructions and sys.stdin.isatty():
         assignment_instructions = prompt_for_grading_instructions(saved_grading_instructions, instructions)
+        if assignment_instructions == saved_grading_instructions and bool(saved_grading_instructions):
+            prompt = (
+                "Create a custom rubric from the saved grading instructions for this assignment? [y/N]: "
+            )
+            explicit_custom_rubric = input(prompt).strip().lower() in {"y", "yes"}
+        else:
+            explicit_custom_rubric = False
         should_persist_grading_instructions = assignment_instructions != saved_grading_instructions
     else:
         assignment_instructions = saved_grading_instructions or instructions
@@ -93,6 +101,9 @@ def run_once(
             assignment_instructions = "\n\n".join(
                 part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}"] if part
             )
+            explicit_custom_rubric = input(
+                "Create a custom rubric from the grading instructions you just entered? [y/N]: "
+            ).strip().lower() in {"y", "yes"}
             should_persist_grading_instructions = assignment_instructions != saved_grading_instructions
         elif not saved_grading_instructions and assignment_instructions == instructions:
             should_persist_grading_instructions = False
@@ -152,6 +163,7 @@ def run_once(
                 essay_text,
                 calibration_examples,
                 fallback_max_points=assignment_max_points,
+                explicit_custom_rubric=explicit_custom_rubric,
             )
             result.submission_id = sub.submission_id
 
