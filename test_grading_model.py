@@ -246,6 +246,10 @@ class GradingModelTests(unittest.TestCase):
             self.fail("Expected a submission to be selected for calibration")
         self.assertEqual("s-1", selected.submission_id)
 
+    def test_prompt_to_continue_calibrating_defaults_to_no(self):
+        self.assertFalse(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: ""))
+        self.assertTrue(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: "yes"))
+
     def test_already_graded_submission_ids_handles_missing_file_and_blank_ids(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "grades.csv")
