@@ -16,6 +16,26 @@ from google_auth import get_credentials
 ESSAY_PREVIEW_CHARS = 3000
 
 
+def select_submission_for_calibration(submissions, already_calibrated_ids, input_func=input):
+    available = [sub for sub in submissions if sub.submission_id not in already_calibrated_ids]
+    if not available:
+        return None
+
+    print("\nAvailable submissions for calibration:")
+    for i, sub in enumerate(available):
+        print(f"  [{i}] submission {sub.submission_id} (student user {sub.student_user_id})")
+
+    while True:
+        raw = input_func("\nPick a submission number to calibrate: ").strip()
+        try:
+            idx = int(raw)
+            if 0 <= idx < len(available):
+                return available[idx]
+        except ValueError:
+            pass
+        print("  enter a valid submission number from the list above.")
+
+
 def main():
     creds = get_credentials()
     classroom = ClassroomClient(creds)
@@ -62,52 +82,52 @@ def main():
         f"{len(already_graded)} already graded for this assignment in {config.OUTPUT_PATH}.\n"
     )
 
-    for sub in submissions:
-        if sub.submission_id in already:
-            continue
+    selected_submission = select_submission_for_calibration(submissions, already)
+    if selected_submission is None:
+        print("No remaining submissions left to calibrate for this assignment.")
+        return
 
-        student_name = classroom.get_student_name(sub.student_user_id)
-        essay_text = drive.export_text(sub.drive_file_id)
+    student_name = classroom.get_student_name(selected_submission.student_user_id)
+    essay_text = drive.export_text(selected_submission.drive_file_id)
 
-        print("=" * 70)
-        print(f"Student: {student_name}  (submission {sub.submission_id})")
-        print("=" * 70)
-        preview = essay_text[:ESSAY_PREVIEW_CHARS]
-        if len(essay_text) > ESSAY_PREVIEW_CHARS:
-            preview += "\n... [truncated for display - full text is still used for calibration]"
-        print(preview)
-        print("-" * 70)
+    print("=" * 70)
+    print(f"Student: {student_name}  (submission {selected_submission.submission_id})")
+    print("=" * 70)
+    preview = essay_text[:ESSAY_PREVIEW_CHARS]
+    if len(essay_text) > ESSAY_PREVIEW_CHARS:
+        preview += "\n... [truncated for display - full text is still used for calibration]"
+    print(preview)
+    print("-" * 70)
 
-        choice = input("\nUse this submission as a calibration example? [y/n/q to stop]: ").strip().lower()
-        if choice == "q":
-            break
-        if choice != "y":
-            continue
+    choice = input("\nUse this submission as a calibration example? [y/n]: ").strip().lower()
+    if choice != "y":
+        print("No calibration example saved for this submission.")
+        return
 
-        if rubric and rubric.criteria:
-            criterion_scores = {}
-            for c in rubric.criteria:
-                print(f"\nCriterion: {c.title} (0-{c.max_score})")
-                for lvl in sorted(c.levels, key=lambda l: -l.score):
-                    print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
-                score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
-                criterion_scores[c.id] = {"score": score}
-        else:
-            max_points = assignment_max_points if assignment_max_points is not None else 100.0
-            print(f"\nOverall score (0-{max_points}):")
-            score = prompt_int("Your overall score for this essay: ", 0, int(max_points))
-            criterion_scores = {"overall": {"score": score}}
+    if rubric and rubric.criteria:
+        criterion_scores = {}
+        for c in rubric.criteria:
+            print(f"\nCriterion: {c.title} (0-{c.max_score})")
+            for lvl in sorted(c.levels, key=lambda l: -l.score):
+                print(f"  {lvl.score}: {lvl.title} - {lvl.description}")
+            score = prompt_int(f"Your score for '{c.title}': ", 0, c.max_score)
+            criterion_scores[c.id] = {"score": score}
+    else:
+        max_points = assignment_max_points if assignment_max_points is not None else 100.0
+        print(f"\nOverall score (0-{max_points}):")
+        score = prompt_int("Your overall score for this essay: ", 0, int(max_points))
+        criterion_scores = {"overall": {"score": score}}
 
-        feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
+    feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
 
-        calibration_store.add_example(coursework_id, {
-            "submission_id": sub.submission_id,
-            "essay_text": essay_text,
-            "criterion_scores": criterion_scores,
-            "feedback_summary": feedback_summary,
-            "grading_instructions": grading_instructions,
-        })
-        print(f"Saved calibration example for {student_name}.\n")
+    calibration_store.add_example(coursework_id, {
+        "submission_id": selected_submission.submission_id,
+        "essay_text": essay_text,
+        "criterion_scores": criterion_scores,
+        "feedback_summary": feedback_summary,
+        "grading_instructions": grading_instructions,
+    })
+    print(f"Saved calibration example for {student_name}.\n")
 
     n = len(calibration_store.load(coursework_id))
     print(f"\nDone. {n} calibration example(s) stored for this assignment in calibration/{coursework_id}.json")

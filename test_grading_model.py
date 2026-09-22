@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 
+import calibrate
 import report_writer
 from classroom_client import ClassroomClient
 from drive_client import DriveClient
@@ -206,6 +207,18 @@ class GradingModelTests(unittest.TestCase):
 
         ordered = sort_submissions_by_student_first_name(FakeClassroom(), submissions)
         self.assertEqual(["s-1", "s-2", "s-3"], [s.submission_id for s in ordered])
+
+    def test_select_submission_for_calibration_asks_for_a_specific_submission(self):
+        submissions = [
+            Submission("s-1", "course", "cw", "u-1", "file-1", "TURNED_IN"),
+            Submission("s-2", "course", "cw", "u-2", "file-2", "TURNED_IN"),
+            Submission("s-3", "course", "cw", "u-3", "file-3", "TURNED_IN"),
+        ]
+        inputs = iter(["0"])
+
+        selected = calibrate.select_submission_for_calibration(submissions, {"s-2"}, input_func=lambda msg: next(inputs))
+
+        self.assertEqual("s-1", selected.submission_id)
 
     def test_already_graded_submission_ids_handles_missing_file_and_blank_ids(self):
         with tempfile.TemporaryDirectory() as tmpdir:
