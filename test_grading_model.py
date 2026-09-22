@@ -301,6 +301,18 @@ class GradingModelTests(unittest.TestCase):
         self.assertNotIn("discussion questions", joined)
         self.assertNotIn("required entries", joined)
 
+    def test_build_custom_rubric_from_instructions_preserves_total_for_1_to_4_topics(self):
+        scenarios = [
+            ("Grade based on the quality of quotes used.", 1, 100),
+            ("Grade based on the quality of quotes and evidence used to support your claim.", 2, 100),
+            ("Use a thesis, include evidence, and organize your paragraphs clearly.", 3, 100),
+            ("Write a persuasive essay with a thesis, evidence, clear organization, and analysis of your reasoning.", 4, 100),
+        ]
+        for instructions, expected_count, max_points in scenarios:
+            rubric = grader.build_custom_rubric_from_instructions(instructions, max_points=max_points)
+            self.assertEqual(expected_count, len(rubric.criteria))
+            self.assertEqual(max_points, rubric.max_total)
+
     def test_run_once_no_rubric_with_saved_instructions_prompts_once_and_persists_replacement(self):
         class FakeClassroom:
             def get_rubric(self, course_id, coursework_id):

@@ -11,10 +11,18 @@ from models import CriterionScore, GradeResult, Rubric, RubricCriterion, RubricL
 log = logging.getLogger("grading_prompt")
 
 
-def _score_band_points(max_points: float | None = 100.0) -> list[int]:
+def _score_band_points(max_points: float | None = 100.0, num_criteria: int = 4) -> list[int]:
     total = max(float(max_points or 100.0), 1.0)
-    raw_weights = [0.40, 0.30, 0.20, 0.10]
-    scores = [int(round(total * weight)) for weight in raw_weights]
+    if num_criteria <= 0:
+        return []
+    raw_weights = [0.40, 0.30, 0.20, 0.10, 0.05]
+    weights = raw_weights[:num_criteria]
+    if len(weights) < num_criteria:
+        while len(weights) < num_criteria:
+            weights.append(1.0 / num_criteria)
+    total_weight = sum(weights)
+    normalized = [weight / total_weight for weight in weights]
+    scores = [int(round(total * weight)) for weight in normalized]
     scores[-1] = int(total - sum(scores[:-1]))
     return scores
 
@@ -62,7 +70,6 @@ def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
 def build_custom_rubric_from_instructions(instructions: str, max_points: float | None = 100.0) -> Rubric:
     text = (instructions or "").strip()
     total = max(float(max_points or 100.0), 1.0)
-    score_parts = _score_band_points(total)
 
     lowered = text.lower()
     topic_map = {
@@ -79,10 +86,13 @@ def build_custom_rubric_from_instructions(instructions: str, max_points: float |
             matches.append(criterion_id)
 
     if not matches:
-        matches = ["argument", "evidence", "organization"]
+        return make_fallback_rubric(total)
+
+    selected = matches[:4]
+    score_parts = _score_band_points(total, len(selected))
 
     criteria = []
-    for index, criterion_id in enumerate(matches[:4]):
+    for index, criterion_id in enumerate(selected):
         title_map = {
             "argument": "Thesis and argument",
             "evidence": "Evidence and support",
@@ -97,7 +107,7 @@ def build_custom_rubric_from_instructions(instructions: str, max_points: float |
             "analysis": "Evaluate whether the response explains ideas, makes connections, and shows reasoning beyond summary or surface description.",
             "mechanics": "Evaluate whether the writing is clear, coherent, and polished enough to communicate ideas effectively.",
         }
-        score = score_parts[index % len(score_parts)]
+        score = score_parts[index]
         criteria.append(
             RubricCriterion(
                 id=f"criterion_{index + 1}",
