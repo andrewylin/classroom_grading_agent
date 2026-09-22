@@ -50,9 +50,9 @@ def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
                 description="Use the assignment prompt and any additional teacher guidance to evaluate the essay as a whole.",
                 levels=[
                     RubricLevel(score=0, title="Missing", description="No meaningful response."),
-                    RubricLevel(score=max_points * 0.5, title="Developing", description="Basic response with major gaps."),
-                    RubricLevel(score=max_points * 0.75, title="Proficient", description="Solid response that meets most expectations."),
-                    RubricLevel(score=max_points, title="Excellent", description="Outstanding response that fully meets the task."),
+                    RubricLevel(score=int(round(max_points * 0.5)), title="Developing", description="Basic response with major gaps."),
+                    RubricLevel(score=int(round(max_points * 0.75)), title="Proficient", description="Solid response that meets most expectations."),
+                    RubricLevel(score=int(round(max_points)), title="Excellent", description="Outstanding response that fully meets the task."),
                 ],
             )
         ],
