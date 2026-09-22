@@ -50,7 +50,7 @@ rubricless evaluation. When `maxPoints` is unavailable, it falls back to a
 
 ```bash
 # Install Ollama: https://ollama.com/download
-ollama pull qwen3:8b
+ollama pull qwen3.8:27b
 ollama serve   # usually starts automatically after install
 ```
 
@@ -73,7 +73,7 @@ set `MODEL_NAME=qwen3:4b` in `.env` — no code changes needed either way.
    add yourself as a test user).
 3. Create an **OAuth client ID** of type **Desktop app**. Download the
    JSON and save it as `client_secret.json` in this folder.
-4. Find the Classroom course IDs you want to watch. **Don't copy the
+4. (Optional) Find the Classroom course IDs you want to watch. **Don't copy the
    number straight out of the browser URL** — Classroom's web UI uses a
    base64-encoded slug there (`classroom.google.com/c/<encoded-slug>`),
    not the raw numeric ID the API expects. Decode it first:
