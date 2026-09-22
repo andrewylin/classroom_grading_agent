@@ -67,6 +67,24 @@ def prompt_to_continue_calibrating(input_func=input) -> bool:
     return input_func("\nContinue calibrating another submission? [y/N]: ").strip().lower() in {"y", "yes"}
 
 
+def prompt_for_grading_instructions(existing_instructions: str, default_instructions: str, input_func=input) -> str:
+    existing = existing_instructions.strip()
+    if not existing:
+        return default_instructions
+
+    print("\nExisting grading instructions for this assignment:")
+    print(existing)
+    response = input_func("Keep these grading instructions? [Y/n/replace]: ").strip().lower()
+    if response in {"", "y", "yes"}:
+        return existing
+    if response in {"r", "replace"}:
+        replacement = input_func(
+            "Enter replacement grading instructions (leave blank to use the assignment description): "
+        ).strip()
+        return replacement or default_instructions
+    return default_instructions
+
+
 def main():
     creds = get_credentials()
     classroom = ClassroomClient(creds)
@@ -87,13 +105,25 @@ def main():
 
     rubric = classroom.get_rubric(course_id, coursework_id)
     assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
+    existing_grading_instructions = calibration_store.load_file(coursework_id).get("grading_instructions", "")
+    default_grading_instructions = coursework.get("description", "")
+
     if rubric and rubric.criteria:
-        grading_instructions = coursework.get("description", "")
+        grading_instructions = prompt_for_grading_instructions(
+            existing_grading_instructions,
+            default_grading_instructions,
+        )
     else:
         print("This assignment has no Classroom rubric attached; you'll provide custom grading guidance.")
-        grading_instructions = input(
-            "Enter any additional grading instructions for this assignment (leave blank to just use the assignment description): "
-        ).strip()
+        if existing_grading_instructions:
+            grading_instructions = prompt_for_grading_instructions(
+                existing_grading_instructions,
+                default_grading_instructions,
+            )
+        else:
+            grading_instructions = input(
+                "Enter any additional grading instructions for this assignment (leave blank to just use the assignment description): "
+            ).strip()
         rubric = None
 
     submissions = classroom.list_turned_in_submissions(course_id, coursework_id)

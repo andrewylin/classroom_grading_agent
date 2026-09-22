@@ -66,8 +66,25 @@ def run_once(
 
     rubric = classroom.get_rubric(course_id, coursework_id)
     assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
-    if rubric and rubric.criteria:
+    saved_grading_instructions = calibration_store.load_file(coursework_id).get("grading_instructions", "").strip()
+
+    if saved_grading_instructions:
+        print("\nExisting grading instructions for this assignment:")
+        print(saved_grading_instructions)
+        response = input("Keep these grading instructions? [Y/n/replace]: ").strip().lower()
+        if response in {"", "y", "yes"}:
+            assignment_instructions = saved_grading_instructions
+        elif response in {"r", "replace"}:
+            replacement = input(
+                "Enter replacement grading instructions (leave blank to use the assignment description): "
+            ).strip()
+            assignment_instructions = replacement or instructions
+        else:
+            assignment_instructions = instructions
+    else:
         assignment_instructions = instructions
+
+    if rubric and rubric.criteria:
         calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
     else:
         log.warning("No rubric attached for %s/%s; prompting for custom grading guidance.", course_id, coursework_id)
@@ -76,7 +93,7 @@ def run_once(
             "(leave blank to use the assignment description only): "
         ).strip()
         assignment_instructions = "\n\n".join(
-            part for part in [instructions, f"Additional teacher grading instructions: {custom_instructions}" if custom_instructions else ""] if part
+            part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}" if custom_instructions else ""] if part
         )
         calibration_examples = []
         rubric = None

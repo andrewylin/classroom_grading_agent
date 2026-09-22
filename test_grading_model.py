@@ -252,6 +252,20 @@ class GradingModelTests(unittest.TestCase):
         self.assertFalse(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: ""))
         self.assertTrue(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: "yes"))
 
+    def test_prompt_for_grading_instructions_keeps_existing_value(self):
+        existing = "Use the rubric and cite evidence."
+        result = calibrate.prompt_for_grading_instructions(existing, "Assignment description", input_func=lambda msg: "")
+        self.assertEqual(existing, result)
+
+    def test_prompt_for_grading_instructions_replaces_existing_value(self):
+        prompts = iter(["replace", "Replacement instructions"])
+        result = calibrate.prompt_for_grading_instructions(
+            "Existing instructions",
+            "Assignment description",
+            input_func=lambda msg: next(prompts),
+        )
+        self.assertEqual("Replacement instructions", result)
+
     def test_select_submission_for_calibration_reuses_shared_name_cache_across_calls(self):
         calls = {}
 
