@@ -18,11 +18,18 @@ standards for that specific assignment, rather than some generic notion of
 "good writing."
 
 If a Classroom assignment has no rubric attached, the app still supports a
-fallback grading mode: it reads the assignment's `maxPoints` from Google
-Classroom when available, builds a single overall-quality criterion scaled to
-that total, and asks you for any extra grading guidance needed to anchor the
-rubricless evaluation. When `maxPoints` is unavailable, it falls back to a
-100-point default but logs that warning so the missing metadata is visible.
+safe fallback grading mode: it reads the assignment's `maxPoints` from Google
+Classroom when available and builds a single overall-quality criterion scaled
+to that total. If `maxPoints` is unavailable, it falls back to a 100-point
+default but logs that warning so the missing metadata is visible.
+
+For rubricless assignments, you can also explicitly opt in to a custom rubric
+built from saved grading instructions for that assignment. The app asks for a
+clear yes/no before generating a custom rubric from the saved guidance; it
+will not silently infer or apply a rubric from generic text or a prior
+keep/replace answer. If the saved instructions do not contain a usable signal
+for the assignment type, the app safely falls back to the single-criterion
+rubric instead of guessing essay-specific criteria.
 
 ## How it works
 
@@ -105,6 +112,9 @@ This asks for a course ID and lists its assignments. If an assignment has a
 Classroom rubric, you can enter per-criterion scores. If it does not, the
 script falls back to a single overall score scaled to the assignment's max
 points when available, and it still lets you add custom grading guidance.
+When custom rubric generation is enabled, the script prompts explicitly
+before building a rubric from saved assignment instructions; otherwise it uses
+the safe fallback rubric rather than guessing an assignment-specific template.
 2–4 examples per assignment is usually enough. These are saved to
 `calibration/<coursework_id>.json` and automatically picked up by
 `pipeline.py` the next time it grades that assignment — and those specific
@@ -124,9 +134,11 @@ one-time Google consent screen, caches the token to `token.json` (path set
 by `GOOGLE_TOKEN_PATH`), then prompts you to choose a course and a single
 assignment to grade. It grades only that assignment's turned-in
 submissions, writes one recommendation row per student, and exits when the
-run is done. By default it skips submissions already present in the output
-CSV; use `--regrade` or set `REGRADE_ALREADY_GRADED=true` in `.env` to
-override that default.
+run is done. When no Classroom rubric is attached, the run will only build a
+custom rubric from saved instructions if you explicitly opt in during the
+prompts; otherwise it uses the safe single-criterion fallback. By default it
+skips submissions already present in the output CSV; use `--regrade` or set
+`REGRADE_ALREADY_GRADED=true` in `.env` to override that default.
 
 If you ever change `COURSE_IDS` or otherwise need Google to re-issue
 tokens under different scopes, delete `token.json` first so it re-runs
