@@ -80,6 +80,7 @@ class Recommendation:
     def to_row(self) -> dict:
         return {
             "course_id": self.course_id,
+            "coursework_id": self.coursework_id,
             "coursework_title": self.coursework_title,
             "student_name": self.student_name,
             "student_user_id": self.student_user_id,

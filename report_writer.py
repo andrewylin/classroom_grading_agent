@@ -7,7 +7,7 @@ import config
 from models import Recommendation
 
 FIELDNAMES = [
-    "course_id", "coursework_title", "student_name", "student_user_id",
+    "course_id", "coursework_id", "coursework_title", "student_name", "student_user_id",
     "submission_id", "recommended_grade", "max_grade",
     "criteria_breakdown", "feedback_summary",
 ]
@@ -32,7 +32,12 @@ def append(recommendation: Recommendation):
         writer.writerow({k: _sanitize_csv_field(v) for k, v in row.items()})
 
 
-def already_graded_submission_ids(course_id: str, coursework_title: str, output_path: str | None = None) -> set[str]:
+def already_graded_submission_ids(
+    course_id: str,
+    coursework_title: str,
+    coursework_id: str | None = None,
+    output_path: str | None = None,
+) -> set[str]:
     path = output_path or config.OUTPUT_PATH
     if not os.path.exists(path):
         return set()
@@ -43,10 +48,30 @@ def already_graded_submission_ids(course_id: str, coursework_title: str, output_
         if reader.fieldnames is None:
             return graded
 
+        expected_fieldnames = {"course_id", "coursework_title", "submission_id"}
+        if "coursework_id" in reader.fieldnames:
+            expected_fieldnames.add("coursework_id")
+
         for row in reader:
             if not row:
                 continue
-            if row.get("course_id") == course_id and row.get("coursework_title") == coursework_title:
+            if row.get("course_id") != course_id:
+                continue
+
+            row_coursework_id = (row.get("coursework_id") or "").strip()
+            row_coursework_title = (row.get("coursework_title") or "").strip()
+
+            if coursework_id:
+                if row_coursework_id == coursework_id:
+                    match = True
+                elif "coursework_id" not in row and row_coursework_title == coursework_title:
+                    match = True
+                else:
+                    match = False
+            else:
+                match = row_coursework_title == coursework_title
+
+            if match:
                 submission_id = (row.get("submission_id") or "").strip()
                 if submission_id:
                     graded.add(submission_id)
