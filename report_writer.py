@@ -48,10 +48,6 @@ def already_graded_submission_ids(
         if reader.fieldnames is None:
             return graded
 
-        expected_fieldnames = {"course_id", "coursework_title", "submission_id"}
-        if "coursework_id" in reader.fieldnames:
-            expected_fieldnames.add("coursework_id")
-
         for row in reader:
             if not row:
                 continue

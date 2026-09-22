@@ -51,7 +51,11 @@ def main():
         return
 
     already = calibration_store.calibrated_submission_ids(coursework_id)
-    already_graded = report_writer.already_graded_submission_ids(course_id, coursework.get("title", ""))
+    already_graded = report_writer.already_graded_submission_ids(
+        course_id,
+        coursework.get("title", ""),
+        coursework_id=coursework_id,
+    )
     print(
         f"\n{len(submissions)} turned-in submission(s). "
         f"{len(already)} already calibrated for this assignment. "
