@@ -280,6 +280,11 @@ class GradingModelTests(unittest.TestCase):
         )
         self.assertEqual("Assignment description", result)
 
+    def test_should_use_custom_rubric_requires_explicit_opt_in(self):
+        self.assertFalse(grader.should_use_custom_rubric("Read the essay and grade it", "Write an essay"))
+        self.assertFalse(grader.should_use_custom_rubric("Write a 5-page essay and include 3 quotes; -5 per missing citation.", "Write an essay"))
+        self.assertTrue(grader.should_use_custom_rubric("Use the saved instructions for this assignment.", "Write an essay", explicit_opt_in=True))
+
     def test_build_custom_rubric_from_instructions_uses_point_deduction_rules(self):
         instructions = (
             "there are 10 entries each submission should have. if the quotes are not integrated with context -5, "

@@ -72,9 +72,13 @@ def run_once(
     saved_file = calibration_store.load_file(coursework_id)
     saved_grading_instructions = saved_file.get("grading_instructions", "").strip()
     should_persist_grading_instructions = False
+    explicit_custom_rubric = False
 
     if saved_grading_instructions and sys.stdin.isatty():
         assignment_instructions = prompt_for_grading_instructions(saved_grading_instructions, instructions)
+        explicit_custom_rubric = bool(saved_grading_instructions) and assignment_instructions.strip() == saved_grading_instructions
+        if not explicit_custom_rubric and assignment_instructions.strip() and assignment_instructions.strip() != instructions:
+            explicit_custom_rubric = True
         should_persist_grading_instructions = assignment_instructions != saved_grading_instructions
     else:
         assignment_instructions = saved_grading_instructions or instructions
@@ -93,6 +97,7 @@ def run_once(
             assignment_instructions = "\n\n".join(
                 part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}"] if part
             )
+            explicit_custom_rubric = True
             should_persist_grading_instructions = assignment_instructions != saved_grading_instructions
         elif not saved_grading_instructions and assignment_instructions == instructions:
             should_persist_grading_instructions = False
@@ -152,6 +157,7 @@ def run_once(
                 essay_text,
                 calibration_examples,
                 fallback_max_points=assignment_max_points,
+                explicit_custom_rubric=explicit_custom_rubric,
             )
             result.submission_id = sub.submission_id
 

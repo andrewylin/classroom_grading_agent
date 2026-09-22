@@ -20,19 +20,19 @@ def _score_band_points(max_points: float | None = 100.0) -> list[int]:
 
 
 def _has_point_deduction_language(text: str) -> bool:
-    lowered = (text or "").lower()
-    if not lowered:
+    """Never infer a custom rubric from free-form text. The assignment-specific
+    rubric is only allowed through an explicit opt-in path when the teacher has
+    confirmed custom grading instructions for the assignment."""
+    return False
+
+
+def should_use_custom_rubric(instructions: str, assignment_description: str, explicit_opt_in: bool = False) -> bool:
+    text = (instructions or "").strip()
+    if not text:
         return False
-    patterns = [
-        r"-\d+",
-        r"\d+/\d+",
-        r"missing\s+(entry|quote|set|question)",
-        r"deduct",
-        r"quote.*context",
-        r"discussion questions",
-        r"entries?\s+should\s+have",
-    ]
-    return any(re.search(pattern, lowered) for pattern in patterns)
+    if not explicit_opt_in:
+        return False
+    return bool(text)
 
 
 def make_fallback_rubric(max_points: float | None = 100.0) -> Rubric:
@@ -264,9 +264,10 @@ def grade_essay(
     essay_text: str,
     calibration_examples: list[dict] | None = None,
     fallback_max_points: float | None = 100.0,
+    explicit_custom_rubric: bool = False,
 ) -> GradeResult:
     if rubric is None or not rubric.criteria:
-        if _has_point_deduction_language(assignment_instructions):
+        if should_use_custom_rubric(assignment_instructions, assignment_title, explicit_opt_in=explicit_custom_rubric):
             rubric = build_custom_rubric_from_instructions(assignment_instructions, fallback_max_points)
         else:
             if fallback_max_points is None:
