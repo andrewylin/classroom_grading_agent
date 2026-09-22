@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from typing import cast
 from unittest import mock
 
 import calibrate
@@ -309,8 +310,8 @@ class GradingModelTests(unittest.TestCase):
                 with mock.patch("builtins.input", side_effect=["replace", "Replacement instructions"]):
                     with mock.patch.object(sys, "stdin", mock.Mock(isatty=lambda: True)):
                         result = pipeline.run_once(
-                            FakeClassroom(),
-                            object(),
+                            cast(ClassroomClient, FakeClassroom()),
+                            cast(DriveClient, DriveClient.__new__(DriveClient)),
                             "course-1",
                             {"id": "cw-1", "title": "Essay 1", "description": "Assignment description"},
                         )
@@ -349,8 +350,8 @@ class GradingModelTests(unittest.TestCase):
                 with mock.patch("builtins.input", side_effect=AssertionError("input should not be called")):
                     with mock.patch.object(sys, "stdin", mock.Mock(isatty=lambda: False)):
                         result = pipeline.run_once(
-                            FakeClassroom(),
-                            object(),
+                            cast(ClassroomClient, FakeClassroom()),
+                            cast(DriveClient, DriveClient.__new__(DriveClient)),
                             "course-1",
                             {"id": "cw-1", "title": "Essay 1", "description": "Assignment description"},
                         )
