@@ -40,7 +40,10 @@ rubricless evaluation. When `maxPoints` is unavailable, it falls back to a
 6. It tracks processed submissions in a local SQLite file so it won't
    re-grade a Doc unless the student has edited it since (detected via
    Drive's `headRevisionId`) — if they have, a fresh row is added on the
-   next run. Submissions you've used as calibration examples are skipped
+   next run. It also keeps a local CSV of already-graded submission IDs and
+   skips them by default so repeated runs do not re-grade the same work;
+   use `--regrade` or set `REGRADE_ALREADY_GRADED=true` to override that
+   safeguard. Submissions you've used as calibration examples are skipped
    entirely, since you already graded those yourself.
 
 ## 1. Set up the local model
@@ -112,6 +115,8 @@ those yourself.
 
 ```bash
 python pipeline.py
+# or allow re-grading of already-written rows for this run only
+python pipeline.py --regrade
 ```
 
 This is a manual, one-shot grade run. It opens a browser window for the
@@ -119,7 +124,9 @@ one-time Google consent screen, caches the token to `token.json` (path set
 by `GOOGLE_TOKEN_PATH`), then prompts you to choose a course and a single
 assignment to grade. It grades only that assignment's turned-in
 submissions, writes one recommendation row per student, and exits when the
-run is done.
+run is done. By default it skips submissions already present in the output
+CSV; use `--regrade` or set `REGRADE_ALREADY_GRADED=true` in `.env` to
+override that default.
 
 If you ever change `COURSE_IDS` or otherwise need Google to re-issue
 tokens under different scopes, delete `token.json` first so it re-runs

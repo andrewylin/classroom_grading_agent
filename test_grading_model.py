@@ -1,5 +1,9 @@
+import csv
+import os
+import tempfile
 import unittest
 
+import report_writer
 from classroom_client import ClassroomClient
 from drive_client import DriveClient
 from grader import _build_prompt, _build_schema, make_fallback_rubric, validate_rubric
@@ -202,6 +206,42 @@ class GradingModelTests(unittest.TestCase):
 
         ordered = sort_submissions_by_student_first_name(FakeClassroom(), submissions)
         self.assertEqual(["s-1", "s-2", "s-3"], [s.submission_id for s in ordered])
+
+    def test_already_graded_submission_ids_handles_missing_file_and_blank_ids(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "grades.csv")
+            self.assertEqual(set(), report_writer.already_graded_submission_ids("course-1", "Essay 1", output_path=path))
+
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["course_id", "coursework_id", "coursework_title", "submission_id"])
+                writer.writerow(["course-1", "cw-1", "Essay 1", ""])
+                writer.writerow(["course-1", "cw-1", "Essay 1", "   "])
+                writer.writerow(["course-1", "cw-1", "Essay 1", "sub-123"])
+
+            self.assertEqual({"sub-123"}, report_writer.already_graded_submission_ids("course-1", "Essay 1", coursework_id="cw-1", output_path=path))
+
+    def test_already_graded_submission_ids_matches_coursework_id_and_title_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "grades.csv")
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["course_id", "coursework_id", "coursework_title", "submission_id"])
+                writer.writerow(["course-1", "cw-1", "Essay 1", "sub-1"])
+                writer.writerow(["course-1", "cw-2", "Essay 1", "sub-2"])
+                writer.writerow(["course-1", "cw-1", "Essay 1", "sub-3"])
+
+            self.assertEqual({"sub-1", "sub-3"}, report_writer.already_graded_submission_ids("course-1", "Essay 1", coursework_id="cw-1", output_path=path))
+
+            legacy_path = os.path.join(tmpdir, "legacy_grades.csv")
+            with open(legacy_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["course_id", "coursework_title", "submission_id"])
+                writer.writerow(["course-1", "Essay 1", "legacy-1"])
+                writer.writerow(["course-1", "Essay 1", "legacy-2"])
+                writer.writerow(["course-1", "Essay 2", "legacy-3"])
+
+            self.assertEqual({"legacy-1", "legacy-2"}, report_writer.already_graded_submission_ids("course-1", "Essay 1", output_path=legacy_path))
 
 
 if __name__ == "__main__":

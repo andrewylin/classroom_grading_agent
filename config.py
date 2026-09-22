@@ -34,6 +34,7 @@ MAX_CALIBRATION_CHARS = int(os.getenv("MAX_CALIBRATION_CHARS", "2500"))
 DB_PATH = os.getenv("DB_PATH", "grading_state.sqlite3")
 OUTPUT_PATH = os.getenv("OUTPUT_PATH", "grading_recommendations.csv")
 CALIBRATION_DIR = os.getenv("CALIBRATION_DIR", "calibration")
+REGRADE_ALREADY_GRADED = _bool("REGRADE_ALREADY_GRADED", False)
 # How many of your saved calibration examples to include per grading prompt.
 # More examples improve calibration but lengthen the prompt - on CPU-only
 # hardware that directly costs you time per essay, so keep this small.

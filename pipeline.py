@@ -1,4 +1,7 @@
+import argparse
 import logging
+import sys
+from typing import Protocol
 
 import calibration_store
 import config
@@ -28,7 +31,12 @@ def select_coursework(classroom: ClassroomClient, course_id: str):
     return courseworks[idx]
 
 
-def sort_submissions_by_student_first_name(classroom: ClassroomClient, submissions: list, name_cache: dict | None = None) -> list:
+class StudentNameProvider(Protocol):
+    def get_student_name(self, user_id: str) -> str:
+        ...
+
+
+def sort_submissions_by_student_first_name(classroom: StudentNameProvider, submissions: list, name_cache: dict | None = None) -> list:
     cache = name_cache if name_cache is not None else {}
 
     def first_name_key(submission):
@@ -42,11 +50,19 @@ def sort_submissions_by_student_first_name(classroom: ClassroomClient, submissio
     return sorted(submissions, key=first_name_key)
 
 
-def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, coursework: dict) -> int:
+def run_once(
+    classroom: ClassroomClient,
+    drive: DriveClient,
+    course_id: str,
+    coursework: dict,
+    regrade_already_graded: bool | None = None,
+) -> int:
     """Returns the number of new recommendations written for one selected assignment."""
     coursework_id = coursework["id"]
     title = coursework.get("title", "")
     instructions = coursework.get("description", "")
+    if regrade_already_graded is None:
+        regrade_already_graded = config.REGRADE_ALREADY_GRADED
 
     rubric = classroom.get_rubric(course_id, coursework_id)
     assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
@@ -66,6 +82,19 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
         rubric = None
 
     calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
+    already_graded_ids = report_writer.already_graded_submission_ids(course_id, title, coursework_id=coursework_id)
+    if already_graded_ids and not regrade_already_graded:
+        print(f"{len(already_graded_ids)} submission(s) already graded for this assignment in {config.OUTPUT_PATH}.")
+        if sys.stdin.isatty():
+            response = input("Regrade already-graded submissions? [y/N]: ").strip().lower()
+            regrade_already_graded = response in {"y", "yes"}
+        else:
+            log.info(
+                "Non-interactive session detected; skipping previously graded submissions by default. "
+                "Set REGRADE_ALREADY_GRADED=1 or pass --regrade to override."
+            )
+            regrade_already_graded = False
+
     student_name_cache = {}
     submissions = sort_submissions_by_student_first_name(
         classroom,
@@ -78,6 +107,9 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
     failed_count = 0
     for sub in submissions:
         if sub.submission_id in calibrated_ids:
+            skipped_count += 1
+            continue
+        if sub.submission_id in already_graded_ids and not regrade_already_graded:
             skipped_count += 1
             continue
 
@@ -127,6 +159,10 @@ def run_once(classroom: ClassroomClient, drive: DriveClient, course_id: str, cou
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Grade Classroom submissions and append recommendations to a CSV.")
+    parser.add_argument("--regrade", action="store_true", help="Regrade submissions already present in the output CSV.")
+    args = parser.parse_args()
+
     creds = get_credentials()
     classroom = ClassroomClient(creds)
     drive = DriveClient(creds)
@@ -141,7 +177,7 @@ def main():
     log.info("Starting grading run for course %s (%s) assignment %s", course_name, course_id, coursework.get("title", coursework_id))
     log.info("Recommendations will be appended to: %s", config.OUTPUT_PATH)
 
-    n = run_once(classroom, drive, course_id, coursework)
+    n = run_once(classroom, drive, course_id, coursework, regrade_already_graded=args.regrade or config.REGRADE_ALREADY_GRADED)
     if n:
         log.info("%d new recommendation(s) added to %s", n, config.OUTPUT_PATH)
     else:
