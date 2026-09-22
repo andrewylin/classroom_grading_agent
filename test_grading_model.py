@@ -218,7 +218,8 @@ class GradingModelTests(unittest.TestCase):
 
         selected = calibrate.select_submission_for_calibration(submissions, {"s-2"}, input_func=lambda msg: next(inputs))
 
-        self.assertIsNotNone(selected)
+        if selected is None:
+            self.fail("Expected a submission to be selected for calibration")
         self.assertEqual("s-1", selected.submission_id)
 
     def test_already_graded_submission_ids_handles_missing_file_and_blank_ids(self):
