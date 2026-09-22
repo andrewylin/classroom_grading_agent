@@ -66,23 +66,14 @@ def run_once(
 
     rubric = classroom.get_rubric(course_id, coursework_id)
     assignment_max_points = classroom.get_coursework_max_points(course_id, coursework_id)
-    saved_grading_instructions = calibration_store.load_file(coursework_id).get("grading_instructions", "").strip()
 
-    if saved_grading_instructions:
-        print("\nExisting grading instructions for this assignment:")
-        print(saved_grading_instructions)
-        response = input("Keep these grading instructions? [Y/n/replace]: ").strip().lower()
-        if response in {"", "y", "yes"}:
-            assignment_instructions = saved_grading_instructions
-        elif response in {"r", "replace"}:
-            replacement = input(
-                "Enter replacement grading instructions (leave blank to use the assignment description): "
-            ).strip()
-            assignment_instructions = replacement or instructions
-        else:
-            assignment_instructions = instructions
+    from calibrate import prompt_for_grading_instructions
+
+    saved_grading_instructions = calibration_store.load_file(coursework_id).get("grading_instructions", "").strip()
+    if saved_grading_instructions and sys.stdin.isatty():
+        assignment_instructions = prompt_for_grading_instructions(saved_grading_instructions, instructions)
     else:
-        assignment_instructions = instructions
+        assignment_instructions = saved_grading_instructions or instructions
 
     if rubric and rubric.criteria:
         calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]

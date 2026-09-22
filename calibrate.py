@@ -72,17 +72,20 @@ def prompt_for_grading_instructions(existing_instructions: str, default_instruct
     if not existing:
         return default_instructions
 
-    print("\nExisting grading instructions for this assignment:")
-    print(existing)
-    response = input_func("Keep these grading instructions? [Y/n/replace]: ").strip().lower()
-    if response in {"", "y", "yes"}:
-        return existing
-    if response in {"r", "replace"}:
-        replacement = input_func(
-            "Enter replacement grading instructions (leave blank to use the assignment description): "
-        ).strip()
-        return replacement or default_instructions
-    return default_instructions
+    while True:
+        print("\nExisting grading instructions for this assignment:")
+        print(existing)
+        response = input_func("Keep these grading instructions? [Y/n/replace]: ").strip().lower()
+        if response in {"", "y", "yes"}:
+            return existing
+        if response in {"n", "no"}:
+            return default_instructions
+        if response in {"r", "replace"}:
+            replacement = input_func(
+                "Enter replacement grading instructions (leave blank to use the assignment description): "
+            ).strip()
+            return replacement or default_instructions
+        print("  Please enter Y, N, or replace.")
 
 
 def main():

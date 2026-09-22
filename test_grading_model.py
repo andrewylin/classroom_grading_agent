@@ -266,6 +266,15 @@ class GradingModelTests(unittest.TestCase):
         )
         self.assertEqual("Replacement instructions", result)
 
+    def test_prompt_for_grading_instructions_reprompts_on_invalid_input(self):
+        prompts = iter(["garbage", "n"])
+        result = calibrate.prompt_for_grading_instructions(
+            "Existing instructions",
+            "Assignment description",
+            input_func=lambda msg: next(prompts),
+        )
+        self.assertEqual("Assignment description", result)
+
     def test_select_submission_for_calibration_reuses_shared_name_cache_across_calls(self):
         calls = {}
 
