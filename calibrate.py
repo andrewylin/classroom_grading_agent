@@ -63,11 +63,13 @@ def select_submission_for_calibration(
         print("  enter a valid submission number from the list above.")
 
 
-def prompt_to_continue_calibrating(input_func=input) -> bool:
+def prompt_to_continue_calibrating(input_func=None) -> bool:
+    input_func = input_func or input
     return input_func("\nContinue calibrating another submission? [y/N]: ").strip().lower() in {"y", "yes"}
 
 
-def prompt_for_grading_instructions(existing_instructions: str, default_instructions: str, input_func=input) -> str:
+def prompt_for_grading_instructions(existing_instructions: str, default_instructions: str, input_func=None) -> str:
+    input_func = input_func or input
     existing = existing_instructions.strip()
     if not existing:
         return default_instructions

@@ -79,15 +79,26 @@ def run_once(
         calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
     else:
         log.warning("No rubric attached for %s/%s; prompting for custom grading guidance.", course_id, coursework_id)
-        custom_instructions = input(
-            "No rubric found for this assignment. Enter any additional grading instructions for the prompt "
-            "(leave blank to use the assignment description only): "
-        ).strip()
-        assignment_instructions = "\n\n".join(
-            part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}" if custom_instructions else ""] if part
-        )
+        if assignment_instructions == instructions:
+            if sys.stdin.isatty():
+                custom_instructions = input(
+                    "No rubric found for this assignment. Enter any additional grading instructions for the prompt "
+                    "(leave blank to use the assignment description only): "
+                ).strip()
+                assignment_instructions = "\n\n".join(
+                    part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}" if custom_instructions else ""] if part
+                )
+            else:
+                custom_instructions = ""
+                assignment_instructions = instructions
+        else:
+            custom_instructions = ""
         calibration_examples = []
         rubric = None
+
+        saved_file = calibration_store.load_file(coursework_id)
+        saved_file["grading_instructions"] = assignment_instructions
+        calibration_store.save_file(coursework_id, saved_file)
 
     calibrated_ids = calibration_store.calibrated_submission_ids(coursework_id)
     already_graded_ids = report_writer.already_graded_submission_ids(course_id, title, coursework_id=coursework_id)

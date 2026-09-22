@@ -1,11 +1,14 @@
 import csv
 import json
 import os
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import calibrate
 import calibration_store
+import pipeline
 import report_writer
 from classroom_client import ClassroomClient
 from drive_client import DriveClient
@@ -274,6 +277,90 @@ class GradingModelTests(unittest.TestCase):
             input_func=lambda msg: next(prompts),
         )
         self.assertEqual("Assignment description", result)
+
+    def test_run_once_no_rubric_with_saved_instructions_prompts_once_and_persists_replacement(self):
+        class FakeClassroom:
+            def get_rubric(self, course_id, coursework_id):
+                return None
+
+            def get_coursework_max_points(self, course_id, coursework_id):
+                return 100
+
+            def list_turned_in_submissions(self, course_id, coursework_id):
+                return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_dir = calibration_store.config.CALIBRATION_DIR
+            calibration_store.config.CALIBRATION_DIR = tmpdir
+            original_load_file = calibration_store.load_file
+            original_save_file = calibration_store.save_file
+            original_calibrated = calibration_store.calibrated_submission_ids
+            original_already_graded = report_writer.already_graded_submission_ids
+            try:
+                calibration_store.load_file = lambda coursework_id: {"grading_instructions": "Saved instructions", "examples": []}
+                captured = {}
+
+                def fake_save_file(coursework_id, payload):
+                    captured["payload"] = payload
+
+                calibration_store.save_file = fake_save_file
+                calibration_store.calibrated_submission_ids = lambda coursework_id: set()
+                report_writer.already_graded_submission_ids = lambda *args, **kwargs: set()
+                with mock.patch("builtins.input", side_effect=["replace", "Replacement instructions"]):
+                    with mock.patch.object(sys, "stdin", mock.Mock(isatty=lambda: True)):
+                        result = pipeline.run_once(
+                            FakeClassroom(),
+                            object(),
+                            "course-1",
+                            {"id": "cw-1", "title": "Essay 1", "description": "Assignment description"},
+                        )
+                        self.assertEqual(0, result)
+                        self.assertEqual("Replacement instructions", captured["payload"]["grading_instructions"])
+            finally:
+                calibration_store.config.CALIBRATION_DIR = original_dir
+                calibration_store.load_file = original_load_file
+                calibration_store.save_file = original_save_file
+                calibration_store.calibrated_submission_ids = original_calibrated
+                report_writer.already_graded_submission_ids = original_already_graded
+
+    def test_run_once_no_rubric_skips_custom_input_when_not_interactive(self):
+        class FakeClassroom:
+            def get_rubric(self, course_id, coursework_id):
+                return None
+
+            def get_coursework_max_points(self, course_id, coursework_id):
+                return 100
+
+            def list_turned_in_submissions(self, course_id, coursework_id):
+                return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_dir = calibration_store.config.CALIBRATION_DIR
+            original_load_file = calibration_store.load_file
+            original_save_file = calibration_store.save_file
+            original_calibrated = calibration_store.calibrated_submission_ids
+            original_already_graded = report_writer.already_graded_submission_ids
+            try:
+                calibration_store.config.CALIBRATION_DIR = tmpdir
+                calibration_store.load_file = lambda coursework_id: {"grading_instructions": "", "examples": []}
+                calibration_store.save_file = lambda *args, **kwargs: None
+                calibration_store.calibrated_submission_ids = lambda coursework_id: set()
+                report_writer.already_graded_submission_ids = lambda *args, **kwargs: set()
+                with mock.patch("builtins.input", side_effect=AssertionError("input should not be called")):
+                    with mock.patch.object(sys, "stdin", mock.Mock(isatty=lambda: False)):
+                        result = pipeline.run_once(
+                            FakeClassroom(),
+                            object(),
+                            "course-1",
+                            {"id": "cw-1", "title": "Essay 1", "description": "Assignment description"},
+                        )
+                        self.assertEqual(0, result)
+            finally:
+                calibration_store.config.CALIBRATION_DIR = original_dir
+                calibration_store.load_file = original_load_file
+                calibration_store.save_file = original_save_file
+                calibration_store.calibrated_submission_ids = original_calibrated
+                report_writer.already_graded_submission_ids = original_already_graded
 
     def test_select_submission_for_calibration_reuses_shared_name_cache_across_calls(self):
         calls = {}
