@@ -69,9 +69,13 @@ def run_once(
 
     from calibrate import prompt_for_grading_instructions
 
-    saved_grading_instructions = calibration_store.load_file(coursework_id).get("grading_instructions", "").strip()
+    saved_file = calibration_store.load_file(coursework_id)
+    saved_grading_instructions = saved_file.get("grading_instructions", "").strip()
+    should_persist_grading_instructions = False
+
     if saved_grading_instructions and sys.stdin.isatty():
         assignment_instructions = prompt_for_grading_instructions(saved_grading_instructions, instructions)
+        should_persist_grading_instructions = assignment_instructions != saved_grading_instructions
     else:
         assignment_instructions = saved_grading_instructions or instructions
 
@@ -79,24 +83,25 @@ def run_once(
         calibration_examples = calibration_store.load(coursework_id)[:config.MAX_CALIBRATION_EXAMPLES]
     else:
         log.warning("No rubric attached for %s/%s; prompting for custom grading guidance.", course_id, coursework_id)
-        if assignment_instructions == instructions:
-            if sys.stdin.isatty():
-                custom_instructions = input(
-                    "No rubric found for this assignment. Enter any additional grading instructions for the prompt "
-                    "(leave blank to use the assignment description only): "
-                ).strip()
-                assignment_instructions = "\n\n".join(
-                    part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}" if custom_instructions else ""] if part
-                )
-            else:
-                custom_instructions = ""
-                assignment_instructions = instructions
-        else:
-            custom_instructions = ""
+        custom_instructions = ""
+        if assignment_instructions == instructions and sys.stdin.isatty():
+            custom_instructions = input(
+                "No rubric found for this assignment. Enter any additional grading instructions for the prompt "
+                "(leave blank to use the assignment description only): "
+            ).strip()
+        if custom_instructions:
+            assignment_instructions = "\n\n".join(
+                part for part in [assignment_instructions, f"Additional teacher grading instructions: {custom_instructions}"] if part
+            )
+            should_persist_grading_instructions = assignment_instructions != saved_grading_instructions
+        elif not saved_grading_instructions and assignment_instructions == instructions:
+            should_persist_grading_instructions = False
+        elif assignment_instructions != saved_grading_instructions:
+            should_persist_grading_instructions = True
         calibration_examples = []
         rubric = None
 
-        saved_file = calibration_store.load_file(coursework_id)
+    if should_persist_grading_instructions and assignment_instructions != saved_file.get("grading_instructions", ""):
         saved_file["grading_instructions"] = assignment_instructions
         calibration_store.save_file(coursework_id, saved_file)
 
