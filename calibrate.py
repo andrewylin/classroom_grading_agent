@@ -13,6 +13,7 @@ from cli import prompt_int, select_course_id
 from drive_client import DriveClient
 from google_auth import get_credentials
 from models import Submission
+from pipeline import sort_submissions_by_student_first_name
 
 ESSAY_PREVIEW_CHARS = 3000
 
@@ -23,7 +24,11 @@ def select_submission_for_calibration(
     get_student_name,
     input_func=input,
 ) -> Submission | None:
-    available: list[Submission] = [sub for sub in submissions if sub.submission_id not in already_calibrated_ids]
+    classroom_like = type("StudentNameProvider", (), {"get_student_name": staticmethod(get_student_name)})()
+    available: list[Submission] = [
+        sub for sub in sort_submissions_by_student_first_name(classroom_like, submissions)
+        if sub.submission_id not in already_calibrated_ids
+    ]
     if not available:
         return None
 

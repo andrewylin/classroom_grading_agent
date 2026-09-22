@@ -208,6 +208,25 @@ class GradingModelTests(unittest.TestCase):
         ordered = sort_submissions_by_student_first_name(FakeClassroom(), submissions)
         self.assertEqual(["s-1", "s-2", "s-3"], [s.submission_id for s in ordered])
 
+    def test_select_submission_for_calibration_sorts_by_student_first_name(self):
+        submissions = [
+            Submission("s-3", "course", "cw", "u-3", "file-3", "TURNED_IN"),
+            Submission("s-1", "course", "cw", "u-1", "file-1", "TURNED_IN"),
+            Submission("s-2", "course", "cw", "u-2", "file-2", "TURNED_IN"),
+        ]
+        inputs = iter(["1"])
+
+        selected = calibrate.select_submission_for_calibration(
+            submissions,
+            set(),
+            get_student_name=lambda user_id: {"u-1": "Alice Brown", "u-2": "Bob Chen", "u-3": "Carol Diaz"}[user_id],
+            input_func=lambda msg: next(inputs),
+        )
+
+        if selected is None:
+            self.fail("Expected a submission to be selected for calibration")
+        self.assertEqual("s-2", selected.submission_id)
+
     def test_select_submission_for_calibration_asks_for_a_specific_submission(self):
         submissions = [
             Submission("s-1", "course", "cw", "u-1", "file-1", "TURNED_IN"),
