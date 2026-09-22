@@ -250,6 +250,29 @@ class GradingModelTests(unittest.TestCase):
         self.assertFalse(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: ""))
         self.assertTrue(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: "yes"))
 
+    def test_select_submission_for_calibration_reuses_student_name_cache(self):
+        calls = {}
+
+        def fake_get_student_name(user_id):
+            calls[user_id] = calls.get(user_id, 0) + 1
+            return {"u-1": "Alice Brown", "u-2": "Bob Chen", "u-3": "Carol Diaz"}[user_id]
+
+        submissions = [
+            Submission("s-3", "course", "cw", "u-3", "file-3", "TURNED_IN"),
+            Submission("s-1", "course", "cw", "u-1", "file-1", "TURNED_IN"),
+            Submission("s-2", "course", "cw", "u-2", "file-2", "TURNED_IN"),
+        ]
+
+        selected = calibrate.select_submission_for_calibration(
+            submissions,
+            set(),
+            get_student_name=fake_get_student_name,
+            input_func=lambda msg: "0",
+        )
+
+        self.assertEqual("s-1", selected.submission_id)
+        self.assertEqual({"u-1": 1, "u-2": 1, "u-3": 1}, calls)
+
     def test_already_graded_submission_ids_handles_missing_file_and_blank_ids(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "grades.csv")

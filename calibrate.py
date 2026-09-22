@@ -24,9 +24,16 @@ def select_submission_for_calibration(
     get_student_name,
     input_func=input,
 ) -> Submission | None:
-    classroom_like = type("StudentNameProvider", (), {"get_student_name": staticmethod(get_student_name)})()
+    name_cache: dict[str, str] = {}
+
+    def lookup_student_name(user_id: str) -> str:
+        if user_id not in name_cache:
+            name_cache[user_id] = get_student_name(user_id)
+        return name_cache[user_id]
+
+    classroom_like = type("StudentNameProvider", (), {"get_student_name": staticmethod(lookup_student_name)})()
     available: list[Submission] = [
-        sub for sub in sort_submissions_by_student_first_name(classroom_like, submissions)
+        sub for sub in sort_submissions_by_student_first_name(classroom_like, submissions, name_cache=name_cache)
         if sub.submission_id not in already_calibrated_ids
     ]
     if not available:
@@ -34,7 +41,7 @@ def select_submission_for_calibration(
 
     print("\nAvailable submissions for calibration:")
     for i, sub in enumerate(available):
-        student_name = get_student_name(sub.student_user_id)
+        student_name = lookup_student_name(sub.student_user_id)
         print(f"  [{i}] {student_name} (submission {sub.submission_id})")
 
     while True:
