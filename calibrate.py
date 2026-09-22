@@ -23,17 +23,17 @@ def select_submission_for_calibration(
     already_calibrated_ids: set[str],
     get_student_name,
     input_func=input,
+    name_cache: dict[str, str] | None = None,
 ) -> Submission | None:
-    name_cache: dict[str, str] = {}
+    cache = name_cache if name_cache is not None else {}
 
     def lookup_student_name(user_id: str) -> str:
-        if user_id not in name_cache:
-            name_cache[user_id] = get_student_name(user_id)
-        return name_cache[user_id]
+        if user_id not in cache:
+            cache[user_id] = get_student_name(user_id)
+        return cache[user_id]
 
-    classroom_like = type("StudentNameProvider", (), {"get_student_name": staticmethod(lookup_student_name)})()
     available: list[Submission] = [
-        sub for sub in sort_submissions_by_student_first_name(classroom_like, submissions, name_cache=name_cache)
+        sub for sub in sort_submissions_by_student_first_name(type("StudentNameProvider", (), {"get_student_name": staticmethod(lookup_student_name)})(), submissions, name_cache=cache)
         if sub.submission_id not in already_calibrated_ids
     ]
     if not available:
@@ -105,8 +105,9 @@ def main():
         f"{len(already_graded)} already graded for this assignment in {config.OUTPUT_PATH}.\n"
     )
 
+    name_cache: dict[str, str] = {}
     while True:
-        selected_submission = select_submission_for_calibration(submissions, already, classroom.get_student_name)
+        selected_submission = select_submission_for_calibration(submissions, already, classroom.get_student_name, name_cache=name_cache)
         if selected_submission is None:
             print("No remaining submissions left to calibrate for this assignment.")
             return
@@ -146,13 +147,15 @@ def main():
 
         feedback_summary = input("\nYour overall feedback summary for this student: ").strip()
 
-        calibration_store.add_example(coursework_id, {
+        cal_file = calibration_store.load_file(coursework_id)
+        cal_file["grading_instructions"] = grading_instructions
+        cal_file["examples"].append({
             "submission_id": selected_submission.submission_id,
             "essay_text": essay_text,
             "criterion_scores": criterion_scores,
             "feedback_summary": feedback_summary,
-            "grading_instructions": grading_instructions,
         })
+        calibration_store.save_file(coursework_id, cal_file)
         already.add(selected_submission.submission_id)
         print(f"Saved calibration example for {student_name}.\n")
 

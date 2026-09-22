@@ -1,9 +1,11 @@
 import csv
+import json
 import os
 import tempfile
 import unittest
 
 import calibrate
+import calibration_store
 import report_writer
 from classroom_client import ClassroomClient
 from drive_client import DriveClient
@@ -249,6 +251,60 @@ class GradingModelTests(unittest.TestCase):
     def test_prompt_to_continue_calibrating_defaults_to_no(self):
         self.assertFalse(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: ""))
         self.assertTrue(calibrate.prompt_to_continue_calibrating(input_func=lambda msg: "yes"))
+
+    def test_select_submission_for_calibration_reuses_shared_name_cache_across_calls(self):
+        calls = {}
+
+        def fake_get_student_name(user_id):
+            calls[user_id] = calls.get(user_id, 0) + 1
+            return {"u-1": "Alice Brown", "u-2": "Bob Chen", "u-3": "Carol Diaz"}[user_id]
+
+        submissions = [
+            Submission("s-3", "course", "cw", "u-3", "file-3", "TURNED_IN"),
+            Submission("s-1", "course", "cw", "u-1", "file-1", "TURNED_IN"),
+            Submission("s-2", "course", "cw", "u-2", "file-2", "TURNED_IN"),
+        ]
+        shared_cache = {}
+
+        first = calibrate.select_submission_for_calibration(
+            submissions,
+            set(),
+            get_student_name=fake_get_student_name,
+            input_func=lambda msg: "0",
+            name_cache=shared_cache,
+        )
+        second = calibrate.select_submission_for_calibration(
+            submissions,
+            {first.submission_id},
+            get_student_name=fake_get_student_name,
+            input_func=lambda msg: "0",
+            name_cache=shared_cache,
+        )
+
+        self.assertEqual("s-1", first.submission_id)
+        self.assertEqual("s-2", second.submission_id)
+        self.assertEqual({"u-1": 1, "u-2": 1, "u-3": 1}, calls)
+
+    def test_calibration_store_uses_file_level_grading_instructions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                calibration_store.config.CALIBRATION_DIR = os.path.join(tmpdir, "calibration")
+                os.makedirs(calibration_store.config.CALIBRATION_DIR, exist_ok=True)
+
+                calibration_store.save("cw-1", [{"submission_id": "sub-1", "grading_instructions": "legacy rule"}])
+                self.assertEqual("legacy rule", calibration_store.load_file("cw-1")["grading_instructions"])
+                self.assertEqual([{"submission_id": "sub-1"}], calibration_store.load("cw-1"))
+
+                calibration_store.add_example("cw-1", {"submission_id": "sub-2", "essay_text": "text"})
+                saved = calibration_store.load_file("cw-1")
+                self.assertEqual("legacy rule", saved["grading_instructions"])
+                self.assertEqual(["sub-1", "sub-2"], [ex["submission_id"] for ex in saved["examples"]])
+                self.assertNotIn("grading_instructions", saved["examples"][0])
+            finally:
+                os.chdir(old_cwd)
+                calibration_store.config.CALIBRATION_DIR = os.path.join(os.getcwd(), "calibration")
 
     def test_select_submission_for_calibration_reuses_student_name_cache(self):
         calls = {}
