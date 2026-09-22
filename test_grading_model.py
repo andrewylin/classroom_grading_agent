@@ -273,6 +273,9 @@ class GradingModelTests(unittest.TestCase):
             input_func=lambda msg: "0",
             name_cache=shared_cache,
         )
+        if first is None:
+            self.fail("Expected the first calibration selection to succeed")
+
         second = calibrate.select_submission_for_calibration(
             submissions,
             {first.submission_id},
@@ -280,6 +283,8 @@ class GradingModelTests(unittest.TestCase):
             input_func=lambda msg: "0",
             name_cache=shared_cache,
         )
+        if second is None:
+            self.fail("Expected the second calibration selection to succeed")
 
         self.assertEqual("s-1", first.submission_id)
         self.assertEqual("s-2", second.submission_id)
@@ -325,6 +330,8 @@ class GradingModelTests(unittest.TestCase):
             get_student_name=fake_get_student_name,
             input_func=lambda msg: "0",
         )
+        if selected is None:
+            self.fail("Expected a submission to be selected for calibration")
 
         self.assertEqual("s-1", selected.submission_id)
         self.assertEqual({"u-1": 1, "u-2": 1, "u-3": 1}, calls)

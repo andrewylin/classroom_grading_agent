@@ -27,13 +27,21 @@ def select_submission_for_calibration(
 ) -> Submission | None:
     cache = name_cache if name_cache is not None else {}
 
+    class StudentNameProviderAdapter:
+        def __init__(self, lookup):
+            self._lookup = lookup
+
+        def get_student_name(self, user_id: str) -> str:
+            return self._lookup(user_id)
+
     def lookup_student_name(user_id: str) -> str:
         if user_id not in cache:
             cache[user_id] = get_student_name(user_id)
         return cache[user_id]
 
+    student_name_provider = StudentNameProviderAdapter(lookup_student_name)
     available: list[Submission] = [
-        sub for sub in sort_submissions_by_student_first_name(type("StudentNameProvider", (), {"get_student_name": staticmethod(lookup_student_name)})(), submissions, name_cache=cache)
+        sub for sub in sort_submissions_by_student_first_name(student_name_provider, submissions, name_cache=cache)
         if sub.submission_id not in already_calibrated_ids
     ]
     if not available:
